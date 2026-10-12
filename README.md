@@ -44,10 +44,48 @@ Your database data is kept in a Docker volume. `docker compose down -v` deletes 
 | Backend format               | `docker compose exec backend ruff format .`                      |
 | Create migrations            | `docker compose exec backend python manage.py makemigrations`    |
 | Apply migrations             | `docker compose exec backend python manage.py migrate`           |
+| Load demo data               | `docker compose exec backend python manage.py seed_demo`         |
+| Create an admin user         | `docker compose exec backend python manage.py createsuperuser`   |
 | Frontend lint                | `docker compose exec frontend npm run lint`                      |
 | Frontend type check          | `docker compose exec frontend npm run typecheck`                 |
 
 The `exec` commands need the services to be running (`docker compose up` in another terminal, or with `-d`).
+
+## Demo data and logging in
+
+`seed_demo` creates two organizations:
+- **Demo Beverages**: factory Algiers Plant, line Bottling Line 1, and machines M01–M06.
+- **Other Company**: used to prove that tenants can't see each other's data.
+
+It also creates one demo user per role, for example `factory_manager@demo-beverages.test` and `machine_operator@demo-beverages.test`, plus `factory_manager@other-company.test`. Every demo user's password is `DEMO_USER_PASSWORD` from your `.env`. The command is safe to run again.
+
+Log in through the API (PowerShell):
+
+```powershell
+$login = Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/auth/token/ `
+  -ContentType "application/json" `
+  -Body '{"email": "machine_operator@demo-beverages.test", "password": "<DEMO_USER_PASSWORD>"}'
+$headers = @{ Authorization = "Bearer $($login.access)" }
+Invoke-RestMethod -Uri http://localhost:8000/api/v1/me/ -Headers $headers
+Invoke-RestMethod -Uri http://localhost:8000/api/v1/machines/ -Headers $headers
+```
+
+Access tokens last 15 minutes. Get a new one with `POST /api/v1/auth/token/refresh/` and `{"refresh": "<refresh token>"}`.
+
+Django admin: create a superuser (see the table above), then open http://localhost:8000/admin/.
+
+## API (v1)
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /api/v1/auth/token/`, `POST /api/v1/auth/token/refresh/` | Log in, refresh the access token |
+| `GET /api/v1/me/` | Current user, organization, role, permitted factories |
+| `/api/v1/factories/` | Factories (read: all roles; write: factory managers and platform admins) |
+| `/api/v1/lines/?factory=<id>` | Production lines |
+| `/api/v1/machines/?line=<id>` | Machines, ordered by position |
+| `GET /api/v1/health/` | Backend and database status (no login needed) |
+
+Users only ever see the factories their membership allows; anything else returns 404.
 
 Code changes are picked up automatically: Django restarts itself and Vite hot-reloads the page.
 If you change `requirements.txt` or `package.json`, rebuild with `docker compose up --build`.
@@ -59,4 +97,5 @@ For a new frontend package, also run `docker compose down` first, so the contain
 - **"port is already allocated" for 5173.** Stop the other program using that port.
 - **The page shows `backend: unreachable`.** Check `docker compose logs backend`.
 - **The page shows `database: error`.** Check `docker compose logs db`. Make sure `.env` exists and its `POSTGRES_*` values haven't changed since the database volume was first created. If they have, run `docker compose down -v` to start with a fresh database.
+- **Migration errors after pulling new code** (e.g. `InconsistentMigrationHistory`). The development database was created by older code. Reset it with `docker compose down -v` and start again. This deletes all local data; re-run `seed_demo` afterwards.
 - **`failed to connect to the docker API`.** Docker Desktop isn't running. Start it and wait for "Engine running".

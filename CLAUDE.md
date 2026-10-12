@@ -34,9 +34,25 @@ Django apps live in `backend/apps/<name>/` (accounts, organizations, production,
 - Start everything: `docker compose up --build` (frontend http://localhost:5173, backend http://localhost:8000; set `BACKEND_PORT` in `.env` if 8000 is taken)
 - Backend tests: `docker compose exec backend pytest`
 - Backend lint/format: `docker compose exec backend ruff check .` / `ruff format .`
+- Backend lint/format: run `ruff format .` before `ruff check .` (`ruff check --fix` exits non-zero while unfixable issues remain)
 - Migrations: `docker compose exec backend python manage.py makemigrations` / `migrate`
+- Demo data (idempotent; needs `DEMO_USER_PASSWORD` in `.env`): `docker compose exec backend python manage.py seed_demo`
+- Admin user (Django admin at http://localhost:8000/admin/): `docker compose exec backend python manage.py createsuperuser`
+- Reset the development database (deletes all data): `docker compose down -v`, then `docker compose up --build`
+- Get a JWT: `POST /api/v1/auth/token/` with `{"email", "password"}`; send `Authorization: Bearer <access>`
 - Frontend lint/typecheck: `docker compose exec frontend npm run lint` / `docker compose exec frontend npm run typecheck`
 - The database is not exposed to the host; only the backend reaches it inside Docker.
+
+## How to apply tenant isolation
+All helpers are in `backend/apps/organizations/` (`tenancy.py`, `permissions.py`, `serializers.py`). Every app must use them:
+1. **Viewsets** inherit `TenantScopedViewSetMixin` and set `factory_path`, the ORM path from the model to its `Factory` (`"pk"` for Factory, `"factory"` for ProductionLine, `"line__factory"` for Machine, e.g. `"machine__line__factory"` for a machine event). The queryset is then limited to the user's permitted factories, so other tenants' objects return 404.
+2. **Permissions:** always include `IsAuthenticated` and `HasMembership`, plus a role check (`IsConfigurationManagerOrReadOnly`, or a new class in `permissions.py` built on `get_membership()` and `Role`). Roles decide *what you may do*; tenancy decides *which rows you see*. Use both.
+3. **Foreign keys in serializers** that point to tenant data use `ScopedPrimaryKeyRelatedField(queryset=..., factory_path=...)`, so a user can't attach data to another tenant's object.
+4. **Anything that isn't a viewset** (services, AI assistant tools, reports, Celery jobs) filters with `scope_to_user(queryset, user, factory_path)` or `permitted_factories(user)`. Never filter only by an ID from the request.
+5. **Organization on create** comes from `get_membership(user).organization`, never from the request body.
+6. **Tests:** every new endpoint gets tests using the `world` and `api` fixtures (`backend/conftest.py`, `tests/helpers.py`), proving that `other_manager` gets 404 on retrieve/update/delete and doesn't see the data in lists, and that `limited_operator` can't see factory B. See `apps/organizations/tests/test_isolation.py`.
+
+The Django admin is not tenant-scoped: it's a superuser-only tool for platform operators.
 
 ## Non-negotiable rules
 1. **Tenant isolation.** Every query that returns organization data is filtered by the requesting user's organization and permitted factories, enforced on the server (querysets/permissions), never only in the UI. Every new endpoint gets a test proving a user from another organization gets 404/403.
