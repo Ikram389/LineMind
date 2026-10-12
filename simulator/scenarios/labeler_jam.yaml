@@ -1,0 +1,22 @@
+name: labeler_jam
+description: >
+  The cascade from docs/PRODUCT.md §5. The labeler (M05) jams 5 minutes in, for 90 s.
+  Buffer levels are set to reproduce the timeline exactly: labeler stopped 10:05:00,
+  capper (M04) blocked 10:05:03, packer (M06) starved 10:05:08, filler (M03) blocked 10:05:40.
+  Everything recovers automatically when the jam is cleared.
+line: ../config/bottling_line_1.yaml
+start: "2026-10-12T10:00:00Z"
+duration: 15m
+seed: 42
+tick_seconds: 1
+count_interval_seconds: 10
+defect_mode: exact
+buffers:
+  M03-M04: {capacity: 80, initial_level: 19}
+  M04-M05: {initial_level: 45}
+  M05-M06: {initial_level: 13}
+faults:
+  - {machine: M05, at: 5m, duration: 90s, alarm_code: E-204}
+# No defects here: rejected bottles leave the line and would slowly drain the
+# buffers, shifting the cascade timing above.
+defects: []

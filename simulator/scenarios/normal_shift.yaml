@@ -1,0 +1,23 @@
+name: normal_shift
+description: >
+  An ordinary 8-hour shift: four short faults on different machines, a 30-minute
+  planned break for the whole line, and about 1% random defects across Q01-Q06.
+line: ../config/bottling_line_1.yaml
+start: "2026-10-05T06:00:00Z"
+duration: 8h
+seed: 2026
+tick_seconds: 1
+count_interval_seconds: 10
+defect_mode: random
+faults:
+  - {machine: M03, at: 47m, duration: 2m, alarm_code: E-301}     # filler valve fault
+  - {machine: M05, at: 133m, duration: 45s, alarm_code: E-204}   # label jam
+  - {machine: M04, at: 200m, duration: 3m, alarm_code: E-410}    # capper torque fault
+  - {machine: M02, at: 365m, duration: 90s, alarm_code: E-215}   # rinser nozzle blocked
+planned_stops:
+  - {machines: all, at: 4h, duration: 30m, reason: break}
+defects:
+  - {machine: M01, rates: {Q06: 0.001}}               # damaged bottle
+  - {machine: M03, rates: {Q01: 0.003}}               # underfilled
+  - {machine: M04, rates: {Q04: 0.002}}               # missing or tilted cap
+  - {machine: M05, rates: {Q02: 0.002, Q03: 0.001, Q05: 0.001}}  # label problems, bad code

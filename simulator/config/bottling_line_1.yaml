@@ -1,0 +1,21 @@
+# Virtual bottling line (docs/PRODUCT.md §14).
+# external_id values must match the machines in the backend (see seed_demo).
+name: Bottling Line 1
+
+# A buffer (conveyor) sits between each pair of neighbouring machines.
+# It is named "<upstream>-<downstream>", e.g. "M04-M05".
+default_buffer_capacity: 50   # units
+default_initial_level: 25     # units on the conveyor when a scenario starts (line already running)
+
+machines:
+  - {external_id: M01, name: Bottle feeder, type: bottle_feeder, speed_per_hour: 6000}
+  - {external_id: M02, name: Rinser, type: rinser, speed_per_hour: 6000}
+  - {external_id: M03, name: Filler, type: filler, speed_per_hour: 6000}
+  - {external_id: M04, name: Capper, type: capper, speed_per_hour: 6000}
+  - {external_id: M05, name: Labeler, type: labeler, speed_per_hour: 6000}
+  - {external_id: M06, name: Packer, type: packer, speed_per_hour: 6000}
+
+# Optional per-buffer overrides:
+# buffers:
+#   M03-M04: {capacity: 80, initial_level: 40}
+buffers: {}

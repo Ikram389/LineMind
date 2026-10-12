@@ -34,5 +34,18 @@ services:
     depends_on:
       - backend
 
+  # Run on demand: docker compose run --rm simulator python main.py --scenario ...
+  # (the "simulator" profile keeps it out of a plain `docker compose up`).
+  simulator:
+    build: ./simulator
+    profiles: ["simulator"]
+    environment:
+      LINEMIND_API_URL: http://backend:8000
+      SIMULATOR_API_KEY: ${SIMULATOR_API_KEY:-}
+      SIMULATOR_QUEUE_PATH: data/queue.sqlite
+    volumes:
+      # Code, scenarios, the unsent-event queue and output files live in ./simulator.
+      - ./simulator:/app
+
 volumes:
   postgres_data:

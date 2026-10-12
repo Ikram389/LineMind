@@ -1,0 +1,16 @@
+name: reference_1h
+description: >
+  Reference case from docs/PRODUCT.md §14. 1 hour at 6,000 bottles/h with the packer
+  stopped for 5 minutes and exactly 3% defects counted at the packer.
+  Expected at M06: produced 5,500, rejected 165 (Q02 110 + Q04 55), good 5,335.
+line: ../config/bottling_line_1.yaml
+start: "2026-10-05T06:00:00Z"   # default backfill start; --start overrides it
+duration: 1h
+seed: 1
+tick_seconds: 1
+count_interval_seconds: 10
+defect_mode: exact
+faults:
+  - {machine: M06, at: 20m, duration: 5m, alarm_code: E-610}
+defects:
+  - {machine: M06, rates: {Q02: 0.02, Q04: 0.01}}

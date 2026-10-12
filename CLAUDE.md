@@ -42,6 +42,8 @@ Django apps live in `backend/apps/<name>/` (accounts, organizations, production,
 - Get a JWT: `POST /api/v1/auth/token/` with `{"email", "password"}`; send `Authorization: Bearer <access>`
 - Line API key for event senders (printed once): `docker compose exec backend python manage.py create_line_api_key <line_id> "<name>"`; send `Authorization: Api-Key <key>` to `POST /api/v1/events/` or `/api/v1/events/batch/`. Revoke in the Django admin.
 - Frontend lint/typecheck: `docker compose exec frontend npm run lint` / `docker compose exec frontend npm run typecheck`
+- Simulator tests/lint (no backend needed): `docker compose run --rm simulator pytest` / `docker compose run --rm simulator ruff check .`
+- Run the simulator (needs `SIMULATOR_API_KEY` in `.env`): `docker compose run --rm simulator python main.py --scenario scenarios/<name>.yaml --mode backfill --start 2026-10-05T06:00:00Z` (or `--mode accelerated --speed 60`, `--mode realtime`; `--output file` writes JSON Lines to `simulator/data/`)
 - The database is not exposed to the host; only the backend reaches it inside Docker.
 
 ## How to apply tenant isolation
@@ -100,3 +102,32 @@ Code lives in `backend/apps/production/`.
 
 ## Out of scope for now
 MQTT, real PLC/OPC UA integration, automatic physical rejection, predictive maintenance, ERP integration, spare-parts inventory, Kubernetes/microservices.
+
+## Simulator
+Plain Python in `simulator/` (no Django, no MQTT). It runs as the `simulator` Compose service with the `simulator` profile, so `docker compose up` doesn't start it.
+- **Layers.** Each layer knows nothing about the ones after it:
+  - `scenarios.py`: YAML loading and validation.
+  - `machines.py` / `factory.py`: line physics.
+  - `simulation.py`: one tick produces a list of `Event`s.
+  - `runner.py`: pacing by mode.
+  - `senders.py`: `EventSink` with `FileSink` / `HttpSink`.
+  - `event_queue.py`: SQLite queue.
+
+  Simulation code must never import httpx or do I/O. A future real-machine connector should produce `events.Event` and reuse the sinks.
+- **Tick rules (`factory.py`):**
+  - Machines are processed downstream first (M06 → M01).
+  - Speed uses exact `Fraction` credit.
+  - Processed units = `min(credit, input level, output space)`.
+  - State is decided in this order: fault → `stopped`; planned → `planned_stop`; processed ≥ 1 → `running`; input empty → `starved`; output full → `blocked`.
+  - Defective units are counted and removed from the line.
+- **Events (`simulation.py`, `events.py`):**
+  - State events are sent only on transitions.
+  - Counts (cumulative) are sent every `count_interval_seconds` plus once at the end.
+  - Timestamps are UTC and strictly increasing per machine (1 ms tie-break).
+  - `event_id = uuid5(scenario|seed|start, sequence)`, so the same run gives the same IDs (tests, idempotent re-sends).
+- **Modes (`runner.py`):** accelerated mode places simulated time so it *ends* at the real end of the run. Timestamps must never be ahead of the wall clock, because the backend rejects events more than 5 minutes in the future.
+- **Sending.** Events are queued in `simulator/data/queue.sqlite` before sending. Retries keep the same event JSON. Answered events are removed. Unsent events survive restarts.
+- **Known answers** (keep these tests passing):
+  - `reference_1h.yaml`: M06 makes 5,500 / 165 rejected / 5,335 good.
+  - `labeler_jam.yaml`: the timeline matches PRODUCT.md §5.
+- **New scenarios** go in `simulator/scenarios/`. Unknown keys are rejected. Machine IDs must exist in the line config, and all times must be multiples of `tick_seconds`.

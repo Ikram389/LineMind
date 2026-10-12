@@ -9,6 +9,7 @@ Manufacturing intelligence platform for bottling lines: production monitoring, d
 | `frontend` | React + TypeScript (Vite dev server) | http://localhost:5173                      |
 | `backend`  | Django + Django REST Framework      | http://localhost:8000/api/v1/health/       |
 | `db`       | PostgreSQL 16                       | internal only (not exposed to Windows)     |
+| `simulator`| Python factory simulator (run on demand, see below) | sends events to the backend |
 
 ## Prerequisites (Windows)
 
@@ -49,8 +50,11 @@ Your database data is kept in a Docker volume. `docker compose down -v` deletes 
 | Create an admin user         | `docker compose exec backend python manage.py createsuperuser`   |
 | Frontend lint                | `docker compose exec frontend npm run lint`                      |
 | Frontend type check          | `docker compose exec frontend npm run typecheck`                 |
+| Simulator tests              | `docker compose run --rm simulator pytest`                       |
+| Simulator lint               | `docker compose run --rm simulator ruff check .`                 |
 
 The `exec` commands need the services to be running (`docker compose up` in another terminal, or with `-d`).
+The simulator commands use `run --rm`: they start a temporary container and remove it when done.
 
 Code changes are picked up automatically: Django restarts itself and Vite hot-reloads the page.
 If you change `requirements.txt` or `package.json`, rebuild with `docker compose up --build`.
@@ -163,6 +167,65 @@ Rules for every event:
 - `timestamp` includes a timezone and is at most 5 minutes in the future.
 - `machine_external_id` belongs to the key's line.
 - `count` and `rejected` are integers ≥ 0. `count` is required for `production_count_updated`.
+
+## Factory simulator
+
+The simulator (`simulator/`) is a virtual bottling line: M01 Bottle feeder → M02 Rinser → M03 Filler → M04 Capper → M05 Labeler → M06 Packer, with a conveyor (buffer) between each pair. It plays a **scenario** (a YAML file in `simulator/scenarios/`) and sends the resulting machine events to the event API.
+
+### One-time setup
+
+```powershell
+# 1. Backend running and demo data loaded
+docker compose up --build -d
+docker compose exec backend python manage.py seed_demo
+
+# 2. Create an API key for Bottling Line 1 (line id 1 after seed_demo)
+docker compose exec backend python manage.py create_line_api_key 1 "Simulator"
+
+# 3. Put the printed key in .env:
+#    SIMULATOR_API_KEY=lm_xxxxxxxx_yyyyyyyy
+```
+
+The simulator always reaches the backend inside Docker (`http://backend:8000`), whatever `BACKEND_PORT` is.
+
+### Run it (PowerShell, from the project folder)
+
+| Mode | Command | Timestamps |
+| --- | --- | --- |
+| Backfill (history, as fast as possible) | `docker compose run --rm simulator python main.py --scenario scenarios/reference_1h.yaml --mode backfill --start 2026-10-05T06:00:00Z` | from `--start` (must end in the past); without `--start`, the scenario's `start` |
+| Accelerated | `docker compose run --rm simulator python main.py --scenario scenarios/labeler_jam.yaml --mode accelerated --speed 60` | 1 real second = 60 simulated seconds; simulated time **ends now** (15 min in 15 s) |
+| Real time | `docker compose run --rm simulator python main.py --scenario scenarios/sensor_dropout.yaml --mode realtime` | starts now, follows the clock |
+| To a file (no backend needed) | `docker compose run --rm simulator python main.py --scenario scenarios/normal_shift.yaml --mode backfill --output file` | written to `simulator/data/<scenario>-<start>.jsonl` |
+
+Other options:
+- `--duration 30m` overrides the scenario length.
+- `--file data\my_run.jsonl` chooses the output file.
+- `--drain-timeout 300` is how long to keep retrying unsent events at the end.
+- `--log-level DEBUG` gives more detail.
+
+At the end the simulator prints a summary:
+- per machine: produced, rejected, good, state changes, and time in each state;
+- events created, duplicate and rejected, with the rejection reasons.
+
+Then look at the results:
+- `GET /api/v1/lines/1/status/`
+- `GET /api/v1/machines/{id}/state-events/`
+- the Django admin (*Production*)
+
+After a **backfill**, `status` reports every machine as `unknown` (`is_stale: true`), because the data is in the past. The last real state is in `reported_state`. Use accelerated or real time mode to see live states.
+
+### Bundled scenarios
+
+| File | What happens | Known answer |
+| --- | --- | --- |
+| `reference_1h.yaml` | 1 h at 6,000/h, packer (M06) stopped 5 min, 3% exact defects at M06 | M06: produced **5,500**, rejected **165**, good **5,335** |
+| `labeler_jam.yaml` | 15 min; labeler jams at 10:05 for 90 s | capper blocked 10:05:03, packer starved 10:05:08, filler blocked 10:05:40 |
+| `sensor_dropout.yaml` | 10 min; the filler's sensor sends nothing from minute 3 to 5 | M03 shows `unknown` once its data is stale, then normal again |
+| `normal_shift.yaml` | 8 h with four short faults, a 30-min break and ~1% random defects | realistic history |
+
+### If the backend is down
+
+Events are saved to a queue file (`simulator/data/queue.sqlite`) **before** they are sent. If the backend can't be reached, the simulator retries with growing waits (1 s, 2 s, 4 s … up to 60 s). Whatever is still unsent at the end stays in the file and is sent first by the next run, with the same `event_id`s. Running the same scenario with the same start again is safe: the backend answers `duplicate` and nothing is counted twice.
 
 ## Troubleshooting
 

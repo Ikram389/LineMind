@@ -1,0 +1,15 @@
+name: sensor_dropout
+description: >
+  The filler (M03) keeps working but its sensor sends nothing for 2 minutes
+  (from minute 3 to minute 5). The backend should report it as "unknown" once the
+  data is stale, then normal again when events resume. Set announce: true to also
+  send sensor_disconnected / sensor_reconnected.
+line: ../config/bottling_line_1.yaml
+start: "2026-10-12T10:00:00Z"
+duration: 10m
+seed: 7
+tick_seconds: 1
+count_interval_seconds: 10
+defect_mode: exact
+sensor_dropouts:
+  - {machine: M03, at: 3m, duration: 2m, announce: false}
