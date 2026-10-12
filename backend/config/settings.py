@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "apps.accounts",
     "apps.organizations",
+    "apps.production",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -103,6 +104,10 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
 }
+
+# Event ingestion (apps/production/services/ingestion.py)
+EVENT_MAX_FUTURE_SECONDS = 300  # reject events stamped more than 5 minutes in the future
+EVENT_BATCH_MAX_SIZE = 500
 
 # Tokens are signed with SECRET_KEY (the simplejwt default).
 SIMPLE_JWT = {

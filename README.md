@@ -45,11 +45,16 @@ Your database data is kept in a Docker volume. `docker compose down -v` deletes 
 | Create migrations            | `docker compose exec backend python manage.py makemigrations`    |
 | Apply migrations             | `docker compose exec backend python manage.py migrate`           |
 | Load demo data               | `docker compose exec backend python manage.py seed_demo`         |
+| Create a line API key        | `docker compose exec backend python manage.py create_line_api_key <line_id> "<name>"` |
 | Create an admin user         | `docker compose exec backend python manage.py createsuperuser`   |
 | Frontend lint                | `docker compose exec frontend npm run lint`                      |
 | Frontend type check          | `docker compose exec frontend npm run typecheck`                 |
 
 The `exec` commands need the services to be running (`docker compose up` in another terminal, or with `-d`).
+
+Code changes are picked up automatically: Django restarts itself and Vite hot-reloads the page.
+If you change `requirements.txt` or `package.json`, rebuild with `docker compose up --build`.
+For a new frontend package, also run `docker compose down` first, so the container's `node_modules` volume is recreated.
 
 ## Demo data and logging in
 
@@ -83,13 +88,81 @@ Django admin: create a superuser (see the table above), then open http://localho
 | `/api/v1/factories/` | Factories (read: all roles; write: factory managers and platform admins) |
 | `/api/v1/lines/?factory=<id>` | Production lines |
 | `/api/v1/machines/?line=<id>` | Machines, ordered by position |
+| `GET /api/v1/machines/{id}/state-events/?start=&end=` | State changes of a machine, ordered by timestamp (paginated: `limit`, `offset`) |
+| `GET /api/v1/machines/{id}/production-events/?start=&end=` | Counter readings of a machine, ordered by timestamp (paginated) |
+| `GET /api/v1/lines/{id}/status/` | Current state, last count and last-seen time of every machine on a line |
+| `POST /api/v1/events/`, `POST /api/v1/events/batch/` | Send machine events (line API key, not a user login) |
 | `GET /api/v1/health/` | Backend and database status (no login needed) |
 
 Users only ever see the factories their membership allows; anything else returns 404.
+`start` and `end` are ISO 8601 date-times with a timezone, e.g. `2026-10-12T10:00:00Z` (`end` is excluded).
 
-Code changes are picked up automatically: Django restarts itself and Vite hot-reloads the page.
-If you change `requirements.txt` or `package.json`, rebuild with `docker compose up --build`.
-For a new frontend package, also run `docker compose down` first, so the container's `node_modules` volume is recreated.
+## Sending machine events
+
+Machines (for now, the simulator) send events with a **line API key**, not a user login.
+
+**1. Create a key** for a line (find the line id with `GET /api/v1/lines/` or in the admin; after `seed_demo`, Bottling Line 1 is usually `1`):
+
+```powershell
+docker compose exec backend python manage.py create_line_api_key 1 "Simulator"
+```
+
+The key (`lm_...`) is printed **once**. Only a hash is stored, so copy it now. Revoke keys in the Django admin (Line API keys → select → "Revoke selected keys").
+
+**2. Send one event (PowerShell):**
+
+```powershell
+$headers = @{ Authorization = "Api-Key lm_xxxxxxxx_yyyyyyyy" }   # your key
+$body = @{
+  event_id            = [guid]::NewGuid().ToString()
+  machine_external_id = "M04"
+  event_type          = "machine_stopped"
+  timestamp           = (Get-Date).ToUniversalTime().ToString("o")
+  alarm_code          = "E-204"
+} | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/events/ `
+  -Headers $headers -ContentType "application/json" -Body $body
+```
+
+**3. Send a batch (up to 500 events):**
+
+```powershell
+$now = (Get-Date).ToUniversalTime().ToString("o")
+$batch = ConvertTo-Json -InputObject @(
+  @{ event_id = [guid]::NewGuid().ToString(); machine_external_id = "M01"; event_type = "machine_started"; timestamp = $now },
+  @{ event_id = [guid]::NewGuid().ToString(); machine_external_id = "M03"; event_type = "production_count_updated"; timestamp = $now; count = 1250; rejected = 5 }
+)
+$result = Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/events/batch/ `
+  -Headers $headers -ContentType "application/json" -Body $batch
+$result.summary
+$result.results
+```
+
+**The same with curl** (Git Bash, WSL, macOS or Linux):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/events/ \
+  -H "Authorization: Api-Key lm_xxxxxxxx_yyyyyyyy" \
+  -H "Content-Type: application/json" \
+  -d '{"event_id": "7f1c2e9a-0b5d-4c3e-9a1f-2b6d8e4c1a70", "machine_external_id": "M04",
+       "event_type": "machine_stopped", "timestamp": "2026-10-12T10:05:00Z", "alarm_code": "E-204"}'
+```
+
+**4. See the result** in `GET /api/v1/lines/1/status/` (with a user token, see "Demo data and logging in") or in the Django admin under *Production*.
+
+What the backend answers:
+- **`201 "created"`**: the event is stored.
+- **`200 "duplicate"`**: that `event_id` was already stored. Nothing changes, so it's safe to retry.
+- **`400 "rejected"`**: `errors` lists the reason per field.
+
+A batch always answers `200` with one result per event, plus a `summary`.
+
+Rules for every event:
+- `event_id` is a UUID.
+- `event_type` is one of the types in [docs/PRODUCT.md §13](docs/PRODUCT.md).
+- `timestamp` includes a timezone and is at most 5 minutes in the future.
+- `machine_external_id` belongs to the key's line.
+- `count` and `rejected` are integers ≥ 0. `count` is required for `production_count_updated`.
 
 ## Troubleshooting
 

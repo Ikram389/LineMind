@@ -40,6 +40,14 @@ class Factory(models.Model):
         validators=[validate_oee_settings],
         help_text="OEE rules for this factory. See apps/organizations/oee_settings.py.",
     )
+    stale_after_seconds = models.PositiveIntegerField(
+        default=60,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "A machine with no event for longer than this is reported as 'unknown' "
+            "(stale telemetry), never as 'running'."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

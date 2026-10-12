@@ -40,6 +40,7 @@ Django apps live in `backend/apps/<name>/` (accounts, organizations, production,
 - Admin user (Django admin at http://localhost:8000/admin/): `docker compose exec backend python manage.py createsuperuser`
 - Reset the development database (deletes all data): `docker compose down -v`, then `docker compose up --build`
 - Get a JWT: `POST /api/v1/auth/token/` with `{"email", "password"}`; send `Authorization: Bearer <access>`
+- Line API key for event senders (printed once): `docker compose exec backend python manage.py create_line_api_key <line_id> "<name>"`; send `Authorization: Api-Key <key>` to `POST /api/v1/events/` or `/api/v1/events/batch/`. Revoke in the Django admin.
 - Frontend lint/typecheck: `docker compose exec frontend npm run lint` / `docker compose exec frontend npm run typecheck`
 - The database is not exposed to the host; only the backend reaches it inside Docker.
 
@@ -53,6 +54,27 @@ All helpers are in `backend/apps/organizations/` (`tenancy.py`, `permissions.py`
 6. **Tests:** every new endpoint gets tests using the `world` and `api` fixtures (`backend/conftest.py`, `tests/helpers.py`), proving that `other_manager` gets 404 on retrieve/update/delete and doesn't see the data in lists, and that `limited_operator` can't see factory B. See `apps/organizations/tests/test_isolation.py`.
 
 The Django admin is not tenant-scoped: it's a superuser-only tool for platform operators.
+
+## Event ingestion
+Code lives in `backend/apps/production/`.
+- **Entry point.** `services/ingestion.py` (`ingest_event`, `ingest_batch`) is the only code that turns incoming events into stored rows. Views just call it.
+- **Event meaning.** `event_types.py` holds `EventType`, `MachineState` and `EVENT_TYPE_TO_STATE`, the single mapping from event type to state.
+- **Order of checks:**
+  1. The event is a JSON object with a UUID `event_id`.
+  2. If that `event_id` already exists, the answer is `"duplicate"`. Nothing is re-validated or overwritten; the first version wins. The unique constraint is the safety net for simultaneous requests.
+  3. Full validation runs (`IncomingEventSerializer`):
+     - known type;
+     - timestamp with a timezone, converted to UTC, at most `EVENT_MAX_FUTURE_SECONDS` ahead;
+     - machine on the key's line;
+     - counts are integers ≥ 0.
+  4. The event is stored in its own savepoint.
+- **Batches.** One result per event. A bad event never fails the batch. At most `EVENT_BATCH_MAX_SIZE` events.
+- **What gets stored.** Every accepted event becomes an `IngestedEvent`. State types also create a `MachineStateEvent`, a point in time and not an interval; durations come in step 5. `production_count_updated` also creates a `ProductionEvent`, with counts stored exactly as reported. `sensor_reconnected` and `quality_defect_detected` are stored raw only.
+- **Observations are immutable.** They inherit `ImmutableModel`: `save()` on an existing row and `delete()` raise an error. The admin is read-only and machine foreign keys are `PROTECT`. Never use `queryset.update()`/`.delete()` on them.
+- **Order is by event timestamp.** Anything "latest" orders by event `timestamp` (then `received_at`, `id`), never by arrival. Out-of-order delivery is normal.
+- **Stale telemetry.** A machine is `unknown` when it hasn't sent any event for longer than `Factory.stale_after_seconds`, or when it has never reported a state. See `services/line_status.py`.
+- **Authentication.** `LineApiKeyAuthentication` and `HasLineApiKey` are used only on ingestion views. Keys are stored as SHA-256 hashes (`services/api_keys.py`). User endpoints never accept API keys, and ingestion never accepts user tokens.
+- **Tests.** Use `apps/production/tests/events.py` (`make_event`) and the `sender`/`key_client` fixtures in `apps/production/tests/conftest.py`.
 
 ## Non-negotiable rules
 1. **Tenant isolation.** Every query that returns organization data is filtered by the requesting user's organization and permitted factories, enforced on the server (querysets/permissions), never only in the UI. Every new endpoint gets a test proving a user from another organization gets 404/403.
