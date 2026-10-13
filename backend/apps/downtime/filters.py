@@ -1,8 +1,11 @@
 """Query-parameter filters for downtime lists.
 
-Everything time-based goes through a single (start, end) window, so a future
-`?shift=` filter (build step 6) only has to turn a shift into that window.
+Everything time-based goes through a single (start, end) window; `?shift=&date=`
+turns one shift occurrence into that window.
 """
+
+from datetime import date
+from zoneinfo import ZoneInfo
 
 from django.db.models import QuerySet
 from rest_framework.exceptions import ValidationError
@@ -10,12 +13,45 @@ from rest_framework.request import Request
 
 from apps.downtime.models import DowntimeCategory, IncidentOrigin
 from apps.downtime.services.windows import Window
+from apps.organizations.tenancy import scope_to_user
 from apps.organizations.views import integer_query_param
+from apps.production.models import Shift
+from apps.production.services.shifts import occurrence
 from apps.production.views import aware_datetime_param
 
 
 def time_window(request: Request) -> Window:
-    return Window(aware_datetime_param(request, "start"), aware_datetime_param(request, "end"))
+    """The (start, end) window from ?start=&end=, narrowed by ?shift=<id>&date=YYYY-MM-DD."""
+    start = aware_datetime_param(request, "start")
+    end = aware_datetime_param(request, "end")
+    shift_window = _shift_window(request)
+    if shift_window is not None:
+        start = shift_window.start if start is None else max(start, shift_window.start)
+        end = shift_window.end if end is None else min(end, shift_window.end)
+    return Window(start, end)
+
+
+def _shift_window(request: Request) -> Window | None:
+    shift_id = integer_query_param(request, "shift")
+    if shift_id is None:
+        return None
+    raw_date = request.query_params.get("date")
+    if not raw_date:
+        raise ValidationError({"date": "Is required with 'shift' (YYYY-MM-DD, factory time)."})
+    try:
+        local_date = date.fromisoformat(raw_date)
+    except ValueError:
+        raise ValidationError({"date": "Must be a date like 2026-10-13."}) from None
+    shift = (
+        scope_to_user(Shift.objects.select_related("factory"), request.user, "factory")
+        .prefetch_related("breaks")
+        .filter(pk=shift_id)
+        .first()
+    )
+    if shift is None:
+        raise ValidationError({"shift": "Unknown shift."})
+    period = occurrence(shift, local_date, ZoneInfo(shift.factory.timezone))
+    return Window(period.start, period.end)
 
 
 def bool_query_param(request: Request, name: str) -> bool | None:

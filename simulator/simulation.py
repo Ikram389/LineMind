@@ -70,6 +70,7 @@ class Simulation:
         offset = self.tick * dt
         at = self.time_at(offset)
 
+        first_tick = self.tick == 0
         results = self.line.tick(self._conditions(offset), dt)
 
         events: list[Event] = []
@@ -86,6 +87,11 @@ class Simulation:
                 )
                 for code in result.defects
             )
+
+        if first_tick:
+            # Baseline counter reading at the start, as a real connector sends when it
+            # connects: the backend measures production as differences between readings.
+            events.extend(self._count_events(0, starting=True))
 
         self.tick += 1
         end_offset = self.tick * dt
@@ -131,15 +137,15 @@ class Simulation:
                 events.append(self.events.create(machine_id, "sensor_reconnected", at))
         return events
 
-    def _count_events(self, end_offset: int) -> list[Event]:
+    def _count_events(self, end_offset: int, starting: bool = False) -> list[Event]:
         at = self.time_at(end_offset)
         return [
             self.events.create(
                 machine.external_id,
                 "production_count_updated",
                 at,
-                count=machine.count,
-                rejected=machine.rejected,
+                count=0 if starting else machine.count,
+                rejected=0 if starting else machine.rejected,
             )
             for machine in self.line.machines
             if not self.scenario.is_silent(machine.external_id, end_offset)

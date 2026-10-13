@@ -68,3 +68,24 @@ class TenantScopedViewSetMixin(GenericAPIView):
         if not self.factory_path:
             raise ImproperlyConfigured(f"{type(self).__name__} must set `factory_path`.")
         return scope_to_user(super().get_queryset(), self.request.user, self.factory_path)
+
+
+def scope_to_organization[M: Model](
+    queryset: QuerySet[M], user: User | AnonymousUser, organization_path: str = "organization"
+) -> QuerySet[M]:
+    """For organization-wide data (e.g. products): keep rows of the user's organization."""
+    membership = get_membership(user)
+    if membership is None:
+        return queryset.none()
+    return queryset.filter(**{organization_path: membership.organization_id})
+
+
+class OrganizationScopedViewSetMixin(GenericAPIView):
+    """Like TenantScopedViewSetMixin, for data that belongs to the whole organization."""
+
+    organization_path: str = "organization"
+
+    def get_queryset(self) -> QuerySet:
+        return scope_to_organization(
+            super().get_queryset(), self.request.user, self.organization_path
+        )

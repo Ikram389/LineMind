@@ -148,12 +148,14 @@ def test_each_machine_starts_with_a_state_event() -> None:
 
 
 def test_counts_every_interval_plus_final_and_never_decreasing() -> None:
-    sim, events = run("labeler_jam")  # 15 min, interval 10 s -> 90 updates per machine
+    sim, events = run("labeler_jam")  # 15 min, interval 10 s -> start + 90 updates per machine
 
     counts = [e for e in events if e.event_type == "production_count_updated"]
     for machine in ("M01", "M06"):
         series = [e for e in counts if e.machine_external_id == machine]
-        assert len(series) == 90
+        assert len(series) == 91
+        assert (series[0].count, series[0].rejected) == (0, 0)  # baseline reading at start
+        assert series[0].timestamp.replace(microsecond=0) == sim.start
         assert [e.count for e in series] == sorted(e.count for e in series)
         assert series[-1].count == sim.stats[machine].produced
         assert all(e.rejected is not None for e in series)

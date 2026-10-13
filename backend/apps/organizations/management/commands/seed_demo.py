@@ -6,10 +6,14 @@ Every demo user gets the password from the DEMO_USER_PASSWORD environment variab
 """
 
 import os
+from datetime import datetime, time, timedelta
+from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.downtime.default_reasons import ensure_default_reasons
@@ -21,11 +25,33 @@ from apps.organizations.models import (
     ProductionLine,
     Role,
 )
+from apps.production.models import (
+    OrderStatus,
+    Product,
+    ProductionOrder,
+    Shift,
+    ShiftBreak,
+    all_days,
+)
+from apps.production.services.orders import overlapping_orders
 
 DEMO_ORGANIZATION = "Demo Beverages"
 DEMO_FACTORY = ("Algiers Plant", "Africa/Algiers")
 DEMO_LINE = "Bottling Line 1"
 DEMO_EMAIL_DOMAIN = "demo-beverages.test"
+
+# (name, start, end, (break start, break end)) in factory time, every day.
+DEMO_SHIFTS = [
+    ("Morning", time(6), time(14), (time(10), time(10, 30))),
+    ("Afternoon", time(14), time(22), (time(18), time(18, 30))),
+    ("Night", time(22), time(6), (time(2), time(2, 30))),
+]
+# (sku, name, ideal cycle time in seconds)
+DEMO_PRODUCTS = [
+    ("W050", "Water 0.5 L", Decimal("0.6")),
+    ("W150", "Water 1.5 L", Decimal("0.9")),
+]
+DEMO_ORDER_QUANTITY = 135_000  # 22.5 h of planned time at 6,000/h
 
 OTHER_ORGANIZATION = "Other Company"
 OTHER_FACTORY = ("Lyon Plant", "Europe/Paris")
@@ -66,6 +92,7 @@ class Command(BaseCommand):
             other_org = self._create_site(
                 OTHER_ORGANIZATION, OTHER_FACTORY, OTHER_LINE, OTHER_MACHINES, OTHER_SPEED_PER_HOUR
             )
+            self._create_planning(demo_org)
 
             emails = [
                 self._create_member(f"{role.value}@{DEMO_EMAIL_DOMAIN}", password, demo_org, role)
@@ -83,6 +110,46 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Demo data is ready. Users (password from .env):"))
         for email in emails:
             self.stdout.write(f"  {email}")
+
+    def _create_planning(self, organization: Organization) -> None:
+        """Shifts, products and today's production order for Algiers Plant."""
+        factory = Factory.objects.get(organization=organization, name=DEMO_FACTORY[0])
+        line = ProductionLine.objects.get(factory=factory, name=DEMO_LINE)
+
+        for name, start, end, (break_start, break_end) in DEMO_SHIFTS:
+            shift, _ = Shift.objects.update_or_create(
+                factory=factory,
+                name=name,
+                defaults={"start_time": start, "end_time": end, "days_of_week": all_days()},
+            )
+            ShiftBreak.objects.update_or_create(
+                shift=shift,
+                name="Break",
+                defaults={"start_time": break_start, "end_time": break_end},
+            )
+
+        products = {}
+        for sku, name, cycle_time in DEMO_PRODUCTS:
+            products[sku], _ = Product.objects.update_or_create(
+                organization=organization,
+                sku=sku,
+                defaults={"name": name, "ideal_cycle_time_seconds": cycle_time},
+            )
+
+        # Today's three shifts in factory time: today 06:00 until tomorrow 06:00.
+        tz = ZoneInfo(factory.timezone)
+        today = timezone.now().astimezone(tz).date()
+        order_start = datetime.combine(today, time(6), tzinfo=tz)
+        order_end = order_start + timedelta(days=1)
+        if not overlapping_orders(line, order_start, order_end).exists():
+            ProductionOrder.objects.create(
+                line=line,
+                product=products["W050"],
+                planned_quantity=DEMO_ORDER_QUANTITY,
+                scheduled_start=order_start,
+                scheduled_end=order_end,
+                status=OrderStatus.RUNNING,
+            )
 
     def _create_site(
         self,

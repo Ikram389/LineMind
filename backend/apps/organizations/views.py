@@ -1,10 +1,12 @@
+from typing import Any
+
 from django.db.models import Model, ProtectedError, QuerySet
 from rest_framework import status, viewsets
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
-from rest_framework.serializers import BaseSerializer
 
+from apps.audit.mixins import AuditedModelViewSetMixin
 from apps.organizations.models import Factory, Machine, ProductionLine
 from apps.organizations.permissions import (
     CanCreateFactory,
@@ -35,10 +37,8 @@ def integer_query_param(request: Request, name: str) -> int | None:
         raise ValidationError({name: "Must be an integer."}) from None
 
 
-class HierarchyViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
-    """Shared behaviour for factories, lines and machines."""
-
-    permission_classes = [IsAuthenticated, HasMembership, IsConfigurationManagerOrReadOnly]
+class ProtectedDeleteMixin:
+    """Deleting something that still has dependent records answers 409 Conflict."""
 
     def perform_destroy(self, instance: Model) -> None:
         try:
@@ -50,16 +50,27 @@ class HierarchyViewSet(TenantScopedViewSetMixin, viewsets.ModelViewSet):
             ) from None
 
 
+class HierarchyViewSet(
+    AuditedModelViewSetMixin,  # first: audits inside the same transaction as the change
+    ProtectedDeleteMixin,
+    TenantScopedViewSetMixin,
+    viewsets.ModelViewSet,
+):
+    """Shared behaviour for factories, lines and machines (every change is audited)."""
+
+    permission_classes = [IsAuthenticated, HasMembership, IsConfigurationManagerOrReadOnly]
+
+
 class FactoryViewSet(HierarchyViewSet):
     queryset = Factory.objects.all()
     serializer_class = FactorySerializer
     factory_path = "pk"
     permission_classes = [*HierarchyViewSet.permission_classes, CanCreateFactory]
 
-    def perform_create(self, serializer: BaseSerializer) -> None:
+    def create_kwargs(self) -> dict[str, Any]:
         membership = get_membership(self.request.user)
         assert membership is not None  # guaranteed by HasMembership
-        serializer.save(organization=membership.organization)
+        return {"organization": membership.organization}
 
 
 class ProductionLineViewSet(HierarchyViewSet):

@@ -7,7 +7,7 @@ import pytest
 from apps.downtime.models import DowntimeCategory, DowntimeEvent, LineStopIncident
 from apps.downtime.services.durations import duration_seconds
 from apps.downtime.services.losses import incident_loss
-from apps.downtime.tests.support import Bottling
+from tests.lines import Bottling
 
 
 def seconds(event: DowntimeEvent) -> float:

@@ -1,4 +1,4 @@
-"""Shared helpers for downtime tests (fixtures are in conftest.py)."""
+"""Bottling test lines and simulator fixtures (pytest fixtures are in backend/conftest.py)."""
 
 import json
 from dataclasses import dataclass
@@ -9,7 +9,7 @@ from apps.organizations.models import Factory, Machine, ProductionLine
 from apps.production.models import LineApiKey
 from apps.production.services.api_keys import create_line_api_key
 
-FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 BOTTLING_MACHINES = [
     ("M01", "Bottle feeder"),

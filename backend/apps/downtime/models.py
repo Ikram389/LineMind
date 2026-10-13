@@ -151,6 +151,10 @@ class DowntimeReason(models.Model):
     name = models.CharField(max_length=200)
     category = models.CharField(max_length=20, choices=ReasonCategory.choices)
     is_active = models.BooleanField(default=True)
+    is_changeover = models.BooleanField(
+        default=False,
+        help_text="Stops classified with this reason are changeovers (see OEE settings).",
+    )
 
     class Meta:
         ordering = ["category", "code"]

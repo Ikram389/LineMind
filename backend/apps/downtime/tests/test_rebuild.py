@@ -13,11 +13,11 @@ from apps.downtime.models import DowntimeEvent, LineStopIncident
 from apps.downtime.services.classification import classify_downtime
 from apps.downtime.services.derivation import rebuild_line
 from apps.downtime.services.durations import duration_seconds
-from apps.downtime.tests.support import Bottling, read_fixture
 from apps.organizations.models import ProductionLine
 from apps.production.models import IngestedEvent, MachineStateEvent
 from apps.production.services.ingestion import ingest_event
 from tests.helpers import ApiFactory, World
+from tests.lines import Bottling, read_fixture
 
 Snapshot = tuple[list[tuple[object, ...]], list[tuple[object, ...]]]
 

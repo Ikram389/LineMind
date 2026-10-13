@@ -46,3 +46,16 @@ class CanCreateFactory(BasePermission):
             return True
         membership = get_membership(request.user)
         return membership is not None and membership.all_factories
+
+
+class AllFactoriesRequiredForWrites(BasePermission):
+    """Organization-wide data (e.g. products) affects every factory: writing it requires
+    access to all factories."""
+
+    message = "Only users with access to all factories can change organization-wide data."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        if request.method in SAFE_METHODS:
+            return True
+        membership = get_membership(request.user)
+        return membership is not None and membership.all_factories

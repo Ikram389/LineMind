@@ -42,6 +42,8 @@ Django apps live in `backend/apps/<name>/` (accounts, organizations, production,
 - Get a JWT: `POST /api/v1/auth/token/` with `{"email", "password"}`; send `Authorization: Bearer <access>`
 - Line API key for event senders (printed once): `docker compose exec backend python manage.py create_line_api_key <line_id> "<name>"`; send `Authorization: Api-Key <key>` to `POST /api/v1/events/` or `/api/v1/events/batch/`. Revoke in the Django admin.
 - Rebuild derived downtime/incidents (idempotent; run after changing a factory's `minimum_stop_seconds` or `stale_after_seconds`): `docker compose exec backend python manage.py rebuild_downtime --line <id> [--start ISO] [--end ISO]`
+- OEE for a line: `GET /api/v1/lines/<id>/oee/?start=ISO&end=ISO[&group_by=hour|day|shift]` (JWT)
+- Backfill today's morning shift (Algiers, 06:00 local = 05:00Z) after seed_demo: `docker compose run --rm simulator python main.py --scenario scenarios/normal_shift.yaml --mode backfill --start <today>T05:00:00Z` (must end in the past, i.e. after 14:00 Algiers)
 - Regenerate the downtime test fixtures (only if the simulator or scenarios change): `docker compose run --rm simulator python main.py --scenario scenarios/<name>.yaml --mode backfill --output file --file data/<name>.jsonl`, then copy to `backend/tests/fixtures/`
 - Frontend lint/typecheck: `docker compose exec frontend npm run lint` / `docker compose exec frontend npm run typecheck`
 - Simulator tests/lint (no backend needed): `docker compose run --rm simulator pytest` / `docker compose run --rm simulator ruff check .`
@@ -107,6 +109,28 @@ Code lives in `backend/apps/downtime/`. `DowntimeEvent` and `LineStopIncident` a
 - **Tests.**
   - Simulator fixtures live in `backend/tests/fixtures/*.jsonl` and are loaded through the real ingestion service with the `load` fixture.
   - Any change to the derivation must keep the "any arrival order == full rebuild" tests passing.
+
+## OEE calculation
+Definitions, settings and their defaults are in `docs/PRODUCT.md` §4. Code:
+- **Calculation.** `backend/apps/analytics/services/oee.py` is the only place OEE is calculated. Its functions are pure and take a `LineData` (`compute_inputs` → `OEEInputs`, then `calculate` → `OEEResult`). `oee_data.py` loads `LineData` in a few queries; `buckets.py` builds hour/day/shift buckets.
+- **Time sets.** Times are combined with `apps/production/services/timeset.py` (`TimeSet` union, intersection, difference, exact `Fraction` seconds). Never add durations of overlapping things by hand.
+- **Shifts.** Shift occurrences come from `apps/production/services/shifts.py: shift_periods()` and are never stored:
+  - shift times are local factory time;
+  - `end <= start` crosses midnight;
+  - an occurrence belongs to the weekday it starts on.
+- **Counts.** Only the counting machine counts (`ProductionLine.output_machine()`):
+  - production is the difference between consecutive cumulative readings, credited to the later reading;
+  - a reading counts only if its time is inside planned time (`TimeSet.contains_end_inclusive`);
+  - a reading at second 0 of a run is a baseline (the simulator sends one).
+- **Ideal cycle time.** It comes from the `ProductionOrder` covering the reading, with `ProductLineCycleTime` overriding the product's value. With no order, the line's slowest nominal speed is used, plus a warning.
+- **Totals and percentages.**
+  - Grouped totals are `calculate(sum_inputs(buckets))`, never an average of percentages.
+  - Percentages are rounded only at the end, half up.
+  - Performance is never capped.
+- **Configuration endpoints.**
+  - Shifts, breaks, products, cycle times and orders: `apps/production/planning_views.py`.
+  - Products are organization-wide (`scope_to_organization`, writes need `all_factories`).
+  - Every configuration viewset uses `AuditedModelViewSetMixin` (`apps/audit/mixins.py`), including factories, lines and machines. Put the mixin *before* any mixin that defines `perform_destroy`.
 
 ## Non-negotiable rules
 1. **Tenant isolation.** Every query that returns organization data is filtered by the requesting user's organization and permitted factories, enforced on the server (querysets/permissions), never only in the UI. Every new endpoint gets a test proving a user from another organization gets 404/403.

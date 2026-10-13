@@ -95,6 +95,44 @@ Treatment of planned stops, micro-stops and changeovers is a **per-factory setti
 
 Expected: planned time 450 min, run time 400 min, availability 88.89%, performance 90.00%, quality 98.00%, **OEE 78.40%**.
 
+### Reference test case (OEE, end to end)
+The simulator's `reference_1h` scenario (§14), sent through the event API and downtime derivation, for a 1-hour range fully inside a shift without breaks, with a product of ideal cycle time 0.6 s:
+
+| Input | Value |
+| --- | --- |
+| Planned production time | 60 min |
+| Unplanned downtime (packer stopped) | 5 min |
+| Run time | 55 min |
+| Total count (counting machine) | 5,500 |
+| Rejects | 165 |
+| Good count | 5,335 |
+
+Expected: availability 91.67%, performance 100.00%, quality 97.00%, **OEE 88.92%**, no warnings, data coverage 100%.
+
+### OEE settings (per factory, `Factory.oee_settings`)
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `planned_stops_excluded` | `true` | Shift breaks and stops with state `planned_stop` are removed from planned production time. If `false`, breaks stay in planned time and planned stops count as unplanned downtime. |
+| `changeovers_are_planned` | `false` | A stop is a changeover when its current classification uses a reason marked `is_changeover`. By default changeovers count as unplanned downtime; if `true` they are removed from planned production time. |
+| `no_data_handling` | `"downtime"` | Time without data from the counting machine (a `no_data` stop, before its first event, or after its data went stale) counts as unplanned downtime. With `"exclude"` it is removed from planned production time. |
+| `minimum_stop_seconds` | `5` | Stops shorter than this are not recorded as downtime events; they still reduce performance (fewer units in the same run time). |
+
+Changing `minimum_stop_seconds` (or `stale_after_seconds`) needs `rebuild_downtime` to update existing downtime events.
+
+### How the OEE inputs are built
+All times are intersected and merged so that no second is ever counted twice. For a line and a time range (never beyond "now"):
+1. **Shift time** = the factory's shift occurrences in the range (shift times are local factory time; a shift may cross midnight and belongs to the day it starts).
+2. **Planned production time** = shift time minus breaks, planned stops, changeovers and no-data time, *as the settings above decide*.
+3. **Unplanned downtime** = the counting machine's breakdown, blocked and starved time (plus changeovers, no-data time and planned stops when the settings count them as downtime), only inside planned production time.
+4. **Run time** = planned production time − unplanned downtime.
+5. **Counts** come from the line's counting machine (default: the last machine). Counters are cumulative: production is the difference between two consecutive readings, credited to the later reading's time, and only counted if that time is inside planned production time. A machine's first reading is only a starting point. A counter that goes down is a reset (the new value counts from zero, with a warning). Rejects come from the same machine's rejected counter.
+6. **Ideal cycle time** = that of the product of the production order covering each reading (a line-specific value overrides the product's). Ideal production time = Σ ideal cycle time × count, which equals ideal cycle time × total count for one product. Without an order, the line's nominal speed (slowest machine) is used and a warning is returned.
+7. Availability, Performance, Quality and OEE follow the definitions above. Performance above 100% is never capped; it returns a warning (the ideal cycle time is probably wrong). With no planned production time all results are null with a reason; a line that never ran has OEE 0.
+8. **Data coverage** = share of planned time that has data from the counting machine (warning below 90%).
+9. Results per hour, day or shift add up exactly: the total of a grouped request is calculated from the summed inputs, never by averaging percentages.
+
+**Known limitation.** Quality currently only counts rejects reported by the line's counting machine. Bottles rejected upstream (e.g. at the labeler) never reach the counting machine, so they appear as a performance loss instead of a quality loss. Build step 9 must revisit this so that line-wide rejects count toward quality.
+
 ---
 
 ## 5. Module 2 — Stoppage intelligence

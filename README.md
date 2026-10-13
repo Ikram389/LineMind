@@ -100,6 +100,16 @@ Django admin: create a superuser (see the table above), then open http://localho
 | `GET/POST /api/v1/downtime-events/{id}/classifications/` | Classification history (GET) or a new classification `{"reason": <id>, "comment": "..."}` (POST: operators, supervisors, factory managers, platform admins) |
 | `GET /api/v1/incidents/`, `GET /api/v1/incidents/{id}/` | Line stop incidents (cascades) with their **first observed stop** and, in the detail, all affected machines in time order. Filters: `line`, `origin`, `start`/`end` |
 | `GET /api/v1/downtime-reasons/?factory=<id>` | The factory's downtime reason catalogue |
+| `GET /api/v1/lines/{id}/oee/?start=&end=[&group_by=hour\|day\|shift]` | OEE with every input, the four results (ratio and %), data coverage and warnings; with `group_by`, one result per bucket plus the total |
+| `/api/v1/shifts/`, `/api/v1/shift-breaks/?shift=<id>` | Shifts (local factory time; may cross midnight) and their breaks |
+| `/api/v1/products/`, `/api/v1/product-cycle-times/` | Products (organization-wide) and line-specific ideal cycle times |
+| `/api/v1/production-orders/?line=&status=&start=&end=` | Which product a line makes when (orders on one line cannot overlap) |
+
+Shifts, products and orders: everyone can read; factory managers and platform admins can change (products: only with access to all factories). Every configuration change, including factories, lines and machines, is recorded in the audit log.
+
+Downtime events can also be filtered by shift: `?shift=<id>&date=YYYY-MM-DD` (the day the shift starts, factory time).
+
+OEE rules, settings and the reference cases are documented in [docs/PRODUCT.md §4](docs/PRODUCT.md).
 | `POST /api/v1/events/`, `POST /api/v1/events/batch/` | Send machine events (line API key, not a user login) |
 | `GET /api/v1/health/` | Backend and database status (no login needed) |
 

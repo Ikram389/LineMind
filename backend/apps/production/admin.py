@@ -2,7 +2,17 @@ from django.contrib import admin, messages
 from django.db.models import QuerySet
 from django.http import HttpRequest
 
-from apps.production.models import IngestedEvent, LineApiKey, MachineStateEvent, ProductionEvent
+from apps.production.models import (
+    IngestedEvent,
+    LineApiKey,
+    MachineStateEvent,
+    Product,
+    ProductionEvent,
+    ProductionOrder,
+    ProductLineCycleTime,
+    Shift,
+    ShiftBreak,
+)
 from apps.production.services.api_keys import revoke
 
 
@@ -70,3 +80,46 @@ class LineApiKeyAdmin(admin.ModelAdmin):
         for api_key in active:
             revoke(api_key)
         self.message_user(request, f"Revoked {count} key(s).", messages.SUCCESS)
+
+
+class ShiftBreakInline(admin.TabularInline):
+    model = ShiftBreak
+    extra = 0
+    fields = ["name", "start_time", "end_time"]
+
+
+@admin.register(Shift)
+class ShiftAdmin(admin.ModelAdmin):
+    list_display = ["name", "factory", "start_time", "end_time", "days_of_week", "is_active"]
+    list_filter = ["factory", "is_active"]
+    inlines = [ShiftBreakInline]
+
+
+class ProductLineCycleTimeInline(admin.TabularInline):
+    model = ProductLineCycleTime
+    extra = 0
+    fields = ["line", "ideal_cycle_time_seconds"]
+
+
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ["name", "sku", "ideal_cycle_time_seconds", "organization"]
+    list_filter = ["organization"]
+    search_fields = ["name", "sku"]
+    inlines = [ProductLineCycleTimeInline]
+
+
+@admin.register(ProductionOrder)
+class ProductionOrderAdmin(admin.ModelAdmin):
+    list_display = [
+        "line",
+        "product",
+        "status",
+        "scheduled_start",
+        "scheduled_end",
+        "actual_start",
+        "actual_end",
+        "planned_quantity",
+    ]
+    list_filter = ["status", "line"]
+    date_hierarchy = "scheduled_start"

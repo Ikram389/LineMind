@@ -18,9 +18,9 @@ from apps.downtime.models import (
     DowntimeReason,
     LineStopIncident,
 )
-from apps.downtime.tests.support import Bottling
 from apps.production.models import IngestedEvent, MachineStateEvent
 from tests.helpers import ApiFactory, World
+from tests.lines import Bottling
 
 EVENTS = "/api/v1/downtime-events/"
 

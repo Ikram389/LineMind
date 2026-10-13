@@ -13,9 +13,9 @@ from typing import Any
 import pytest
 
 from apps.downtime.models import DowntimeEvent, LineStopIncident
-from apps.downtime.tests.support import Bottling, create_bottling_line, read_fixture
 from apps.production.services.ingestion import ingest_batch, ingest_event
 from tests.helpers import World
+from tests.lines import Bottling, create_bottling_line, read_fixture
 
 # Every event_id must be unique, so the second copy gets new (deterministic) ids.
 COPY_NAMESPACE = uuid.UUID("0b8e6a52-5d1c-4f43-9a0e-3a7f4c1d2e90")

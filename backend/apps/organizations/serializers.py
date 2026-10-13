@@ -71,11 +71,25 @@ class FactorySerializer(serializers.ModelSerializer):
 
 class ProductionLineSerializer(serializers.ModelSerializer):
     factory = ScopedPrimaryKeyRelatedField(queryset=Factory.objects.all(), factory_path="pk")
+    counting_machine = ScopedPrimaryKeyRelatedField(
+        queryset=Machine.objects.all(),
+        factory_path="line__factory",
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = ProductionLine
-        fields = ["id", "factory", "name", "created_at", "updated_at"]
+        fields = ["id", "factory", "name", "counting_machine", "created_at", "updated_at"]
         read_only_fields = ["created_at", "updated_at"]
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        machine = attrs.get("counting_machine")
+        if machine is not None and (self.instance is None or machine.line_id != self.instance.pk):
+            raise serializers.ValidationError(
+                {"counting_machine": "Must be a machine of this line."}
+            )
+        return attrs
 
 
 class MachineSerializer(serializers.ModelSerializer):

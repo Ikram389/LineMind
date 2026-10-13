@@ -74,6 +74,14 @@ class ProductionLine(models.Model):
         Factory, on_delete=models.PROTECT, related_name="lines", db_index=True
     )
     name = models.CharField(max_length=200)
+    counting_machine = models.ForeignKey(
+        "Machine",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Machine whose counter defines the line's output. Empty = last machine.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -87,6 +95,12 @@ class ProductionLine(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    def output_machine(self) -> "Machine | None":
+        """The counting machine, or the last machine in the line if none is set."""
+        if self.counting_machine_id is not None:
+            return self.counting_machine
+        return self.machines.order_by("-position").first()
 
 
 class Machine(models.Model):
