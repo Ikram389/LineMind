@@ -48,6 +48,11 @@ class Factory(models.Model):
             "(stale telemetry), never as 'running'."
         ),
     )
+    escalation_after_seconds = models.PositiveIntegerField(
+        default=600,
+        validators=[MinValueValidator(1)],
+        help_text="A stop lasting longer than this is flagged for escalation to maintenance.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

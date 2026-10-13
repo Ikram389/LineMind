@@ -34,6 +34,8 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.organizations",
     "apps.production",
+    "apps.audit",
+    "apps.downtime",
 ]
 
 AUTH_USER_MODEL = "accounts.User"

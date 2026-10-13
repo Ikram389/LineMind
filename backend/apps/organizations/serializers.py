@@ -43,6 +43,7 @@ class FactorySerializer(serializers.ModelSerializer):
             "timezone",
             "oee_settings",
             "stale_after_seconds",
+            "escalation_after_seconds",
             "created_at",
             "updated_at",
         ]

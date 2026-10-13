@@ -26,7 +26,7 @@ vision/       Computer vision (later)
 docs/         PRODUCT.md and other docs
 compose.yaml
 ```
-Django apps live in `backend/apps/<name>/` (accounts, organizations, production, downtime, quality, maintenance, analytics, notifications). Create an app only when a step needs it.
+Django apps live in `backend/apps/<name>/` (accounts, organizations, production, downtime, audit, quality, maintenance, analytics, notifications). Create an app only when a step needs it.
 
 ## Commands
 (Update this section as the project grows.)
@@ -41,6 +41,8 @@ Django apps live in `backend/apps/<name>/` (accounts, organizations, production,
 - Reset the development database (deletes all data): `docker compose down -v`, then `docker compose up --build`
 - Get a JWT: `POST /api/v1/auth/token/` with `{"email", "password"}`; send `Authorization: Bearer <access>`
 - Line API key for event senders (printed once): `docker compose exec backend python manage.py create_line_api_key <line_id> "<name>"`; send `Authorization: Api-Key <key>` to `POST /api/v1/events/` or `/api/v1/events/batch/`. Revoke in the Django admin.
+- Rebuild derived downtime/incidents (idempotent; run after changing a factory's `minimum_stop_seconds` or `stale_after_seconds`): `docker compose exec backend python manage.py rebuild_downtime --line <id> [--start ISO] [--end ISO]`
+- Regenerate the downtime test fixtures (only if the simulator or scenarios change): `docker compose run --rm simulator python main.py --scenario scenarios/<name>.yaml --mode backfill --output file --file data/<name>.jsonl`, then copy to `backend/tests/fixtures/`
 - Frontend lint/typecheck: `docker compose exec frontend npm run lint` / `docker compose exec frontend npm run typecheck`
 - Simulator tests/lint (no backend needed): `docker compose run --rm simulator pytest` / `docker compose run --rm simulator ruff check .`
 - Run the simulator (needs `SIMULATOR_API_KEY` in `.env`): `docker compose run --rm simulator python main.py --scenario scenarios/<name>.yaml --mode backfill --start 2026-10-05T06:00:00Z` (or `--mode accelerated --speed 60`, `--mode realtime`; `--output file` writes JSON Lines to `simulator/data/`)
@@ -77,6 +79,34 @@ Code lives in `backend/apps/production/`.
 - **Stale telemetry.** A machine is `unknown` when it hasn't sent any event for longer than `Factory.stale_after_seconds`, or when it has never reported a state. See `services/line_status.py`.
 - **Authentication.** `LineApiKeyAuthentication` and `HasLineApiKey` are used only on ingestion views. Keys are stored as SHA-256 hashes (`services/api_keys.py`). User endpoints never accept API keys, and ingestion never accepts user tokens.
 - **Tests.** Use `apps/production/tests/events.py` (`make_event`) and the `sender`/`key_client` fixtures in `apps/production/tests/conftest.py`.
+
+## Downtime derivation
+Code lives in `backend/apps/downtime/`. `DowntimeEvent` and `LineStopIncident` are *derived* conclusions: they can always be recomputed from the raw observations and are never typed in by hand.
+- **Intervals.** `services/intervals.py` holds pure functions. Each state transition lasts until the next *different* state; repeated states merge. Sorting is always by `(timestamp, event_id)`, never by arrival.
+- **Telemetry gaps.** Silences longer than `Factory.stale_after_seconds` become `no_data` intervals. The state that was in force resumes after the gap as a `resume` interval. Silence after a machine's last event is not a gap.
+- **Downtime events.** Non-running intervals become `DowntimeEvent`:
+
+  | State | Category |
+  |---|---|
+  | stopped | breakdown |
+  | blocked | blocked |
+  | starved | starved |
+  | planned_stop | planned |
+  | unknown | no_data |
+
+  Closed intervals shorter than `oee_settings.minimum_stop_seconds` are dropped. Open ones (`ended_at=None`) are always kept.
+- **Stable identity.** `(start_kind, start_event_id)` is the raw event that starts the interval. Rebuilds update rows in place, so ids and classifications survive. Rows that disappear but have classifications are marked `is_obsolete` instead of deleted.
+- **After ingestion.** `services/derivation.py: rebuild_after_ingestion()` runs once per ingestion request, called from the ingestion service; it's ready to move to Celery. It rebuilds each affected machine over `[earliest new timestamp, next transition after the latest]`, then regroups incidents. `rebuild_line()` and the `rebuild_downtime` command recompute everything.
+- **Incidents.** `services/incidents.py` groups breakdown/blocked/starved events that start while the current incident is open. First observed stop = earliest breakdown; equal times are all first stops. With no breakdown, `origin="unknown"`. In the API, say "first observed stop", never "root cause".
+- **One formula each.** Durations: `services/durations.py`. Estimated losses: `services/losses.py`, always `{"units", "is_estimate": true, "basis"}`. Escalation: `Factory.escalation_after_seconds`.
+- **Classifications.**
+  - `DowntimeClassification` is append-only: the newest row is `current_classification`.
+  - Write them only through `services/classification.py: classify_downtime()`, which also writes the AuditLog.
+  - Allowed roles: operator, supervisor, factory manager, platform admin.
+- **Audit.** Use `apps/audit/services.py: record_audit()` inside the same transaction for every change to classifications or configuration.
+- **Tests.**
+  - Simulator fixtures live in `backend/tests/fixtures/*.jsonl` and are loaded through the real ingestion service with the `load` fixture.
+  - Any change to the derivation must keep the "any arrival order == full rebuild" tests passing.
 
 ## Non-negotiable rules
 1. **Tenant isolation.** Every query that returns organization data is filtered by the requesting user's organization and permitted factories, enforced on the server (querysets/permissions), never only in the UI. Every new endpoint gets a test proving a user from another organization gets 404/403.

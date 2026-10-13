@@ -12,6 +12,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.accounts.models import User
+from apps.downtime.default_reasons import ensure_default_reasons
 from apps.organizations.models import (
     Factory,
     Machine,
@@ -96,6 +97,7 @@ class Command(BaseCommand):
         factory_obj, _ = Factory.objects.update_or_create(
             organization=organization, name=factory_name, defaults={"timezone": timezone}
         )
+        ensure_default_reasons(factory_obj)
         line, _ = ProductionLine.objects.get_or_create(factory=factory_obj, name=line_name)
         for index, (external_id, name, machine_type) in enumerate(machines):
             Machine.objects.update_or_create(

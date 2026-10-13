@@ -1,8 +1,8 @@
 """Current status of every machine on a line.
 
 Rules:
-- The latest state is chosen by event *timestamp* (when it happened), not by
-  arrival order. Ties are broken by arrival time, then id.
+- The latest state is chosen by event *timestamp* (when it happened), never by
+  arrival order. Ties are broken by event_id, as in the downtime derivation.
 - `last_seen` is the newest event timestamp of any type for that machine.
 - If nothing was seen for longer than the factory's `stale_after_seconds`, or
   the machine never reported a state, the state is "unknown", never "running".
@@ -28,13 +28,13 @@ def get_line_status(line: ProductionLine, now: datetime | None = None) -> dict[s
     latest_states = {
         event.machine_id: event
         for event in MachineStateEvent.objects.filter(machine__line=line)
-        .order_by("machine_id", "-timestamp", "-received_at", "-id")
+        .order_by("machine_id", "-timestamp", "-event_id")
         .distinct("machine_id")
     }
     latest_counts = {
         event.machine_id: event
         for event in ProductionEvent.objects.filter(machine__line=line)
-        .order_by("machine_id", "-timestamp", "-received_at", "-id")
+        .order_by("machine_id", "-timestamp", "-event_id")
         .distinct("machine_id")
     }
     last_seen_by_machine = dict(

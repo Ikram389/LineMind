@@ -47,6 +47,7 @@ Your database data is kept in a Docker volume. `docker compose down -v` deletes 
 | Apply migrations             | `docker compose exec backend python manage.py migrate`           |
 | Load demo data               | `docker compose exec backend python manage.py seed_demo`         |
 | Create a line API key        | `docker compose exec backend python manage.py create_line_api_key <line_id> "<name>"` |
+| Rebuild downtime for a line  | `docker compose exec backend python manage.py rebuild_downtime --line <id>` |
 | Create an admin user         | `docker compose exec backend python manage.py createsuperuser`   |
 | Frontend lint                | `docker compose exec frontend npm run lint`                      |
 | Frontend type check          | `docker compose exec frontend npm run typecheck`                 |
@@ -95,6 +96,10 @@ Django admin: create a superuser (see the table above), then open http://localho
 | `GET /api/v1/machines/{id}/state-events/?start=&end=` | State changes of a machine, ordered by timestamp (paginated: `limit`, `offset`) |
 | `GET /api/v1/machines/{id}/production-events/?start=&end=` | Counter readings of a machine, ordered by timestamp (paginated) |
 | `GET /api/v1/lines/{id}/status/` | Current state, last count and last-seen time of every machine on a line |
+| `GET /api/v1/downtime-events/` | Stops derived from machine states. Filters: `line`, `machine`, `factory`, `incident`, `category` (breakdown, blocked, starved, planned, no_data), `reason` (code), `classified=true/false`, `is_first_stop=true/false`, `start`/`end` |
+| `GET/POST /api/v1/downtime-events/{id}/classifications/` | Classification history (GET) or a new classification `{"reason": <id>, "comment": "..."}` (POST: operators, supervisors, factory managers, platform admins) |
+| `GET /api/v1/incidents/`, `GET /api/v1/incidents/{id}/` | Line stop incidents (cascades) with their **first observed stop** and, in the detail, all affected machines in time order. Filters: `line`, `origin`, `start`/`end` |
+| `GET /api/v1/downtime-reasons/?factory=<id>` | The factory's downtime reason catalogue |
 | `POST /api/v1/events/`, `POST /api/v1/events/batch/` | Send machine events (line API key, not a user login) |
 | `GET /api/v1/health/` | Backend and database status (no login needed) |
 
@@ -167,6 +172,37 @@ Rules for every event:
 - `timestamp` includes a timezone and is at most 5 minutes in the future.
 - `machine_external_id` belongs to the key's line.
 - `count` and `rejected` are integers ≥ 0. `count` is required for `production_count_updated`.
+
+## Downtime and line stop incidents
+
+Every state event the line sends is turned into stop records automatically, right after it is stored:
+
+- Each non-running period of a machine becomes a **downtime event**:
+
+  | Machine state | Downtime category |
+  |---|---|
+  | stopped | breakdown |
+  | blocked | blocked |
+  | starved | starved |
+  | planned stop | planned |
+  | no data (including a silence longer than the factory's stale threshold) | no_data |
+
+  Stops shorter than the factory's minimum (5 s by default) are ignored. A stop that is still going on has no end time yet.
+- Breakdowns, blocked and starved stops that overlap form a **line stop incident**. The earliest breakdown is the **first observed stop**: a clue to where the problem began, not proof of the root cause.
+- Lost production is always an **estimate** (`is_estimate: true`): duration × nominal speed.
+- People classify stops with a reason. Every change is kept as history and recorded in the audit log (Django admin → *Audit log*).
+
+Classify a stop (PowerShell, with a user token as in "Demo data and logging in"):
+
+```powershell
+$reasons = Invoke-RestMethod -Uri "http://localhost:8000/api/v1/downtime-reasons/?factory=1" -Headers $headers
+$jam = ($reasons | Where-Object code -eq "MECH-JAM").id
+$body = @{ reason = $jam; comment = "Label web snapped" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/v1/downtime-events/<id>/classifications/" `
+  -Headers $headers -ContentType "application/json" -Body $body
+```
+
+If you change a factory's `minimum_stop_seconds` or `stale_after_seconds`, recompute the history with `rebuild_downtime --line <id>`. Classifications are kept.
 
 ## Factory simulator
 
