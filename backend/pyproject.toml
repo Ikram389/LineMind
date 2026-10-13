@@ -8,6 +8,7 @@ extend-exclude = ["*/migrations/*"]
 select = ["E", "W", "F", "I", "B", "UP", "DJ"]
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "config.settings"
+DJANGO_SETTINGS_MODULE = "config.settings_test"
+asyncio_default_fixture_loop_scope = "function"
 python_files = ["test_*.py"]
 testpaths = ["tests", "apps"]

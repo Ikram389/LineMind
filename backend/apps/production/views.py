@@ -2,7 +2,9 @@ from datetime import datetime
 
 from django.conf import settings
 from django.db.models import QuerySet
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import LimitOffsetPagination
@@ -12,7 +14,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.organizations.models import Machine, ProductionLine
+from apps.organizations.models import Factory, Machine, ProductionLine
 from apps.organizations.permissions import HasMembership
 from apps.organizations.tenancy import scope_to_user
 from apps.production.authentication import HasLineApiKey, LineApiKeyAuthentication
@@ -24,6 +26,7 @@ from apps.production.serializers import (
 )
 from apps.production.services.ingestion import ingest_batch, ingest_event
 from apps.production.services.line_status import get_line_status
+from apps.production.services.shifts import current_shift
 
 STATUS_CODES = {
     "created": status.HTTP_201_CREATED,
@@ -132,3 +135,28 @@ class LineStatusView(APIView):
         )
         line = get_object_or_404(lines, pk=line_id)
         return Response(get_line_status(line))
+
+
+class CurrentShiftView(APIView):
+    """GET /api/v1/factories/{id}/current-shift/ -> the shift running now, or null."""
+
+    permission_classes = [IsAuthenticated, HasMembership]
+
+    def get(self, request: Request, factory_id: int) -> Response:
+        factories = scope_to_user(Factory.objects.all(), request.user, "pk")
+        factory = get_object_or_404(factories, pk=factory_id)
+        shift = current_shift(factory, timezone.now())
+        if shift is None:
+            return JsonResponse(None, safe=False)  # a JSON `null` body
+        return Response(
+            {
+                "shift_id": shift.shift_id,
+                "name": shift.shift_name,
+                "label": shift.label,
+                "local_date": shift.local_date,
+                "start": shift.start,
+                "end": shift.end,
+                "breaks": [{"start": start, "end": end} for start, end in shift.breaks],
+                "factory_timezone": factory.timezone,
+            }
+        )

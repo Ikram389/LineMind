@@ -8,7 +8,8 @@ For each event:
 4. Store IngestedEvent, plus MachineStateEvent or ProductionEvent depending on
    the type (see event_types.py), in one savepoint.
 After a request's events are stored, downtime is re-derived for the affected
-machines and time window (apps/downtime/services/derivation.py), once per request.
+machines and time window (apps/downtime/services/derivation.py), and live
+messages are queued for after the commit (apps/live/broadcast.py), once per request.
 """
 
 import logging
@@ -22,6 +23,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.downtime.services.derivation import rebuild_after_ingestion
+from apps.live.broadcast import StoredEvent, queue_after_ingestion
 from apps.production.event_types import EVENT_TYPE_TO_STATE, PRODUCTION_EVENT_TYPES
 from apps.production.models import (
     IngestedEvent,
@@ -41,8 +43,8 @@ class IngestResult:
     status: Status
     event_id: str | None
     errors: dict[str, list[str]] = field(default_factory=dict)
-    # (machine_id, timestamp) of a newly stored event; used to re-derive downtime.
-    stored: tuple[int, datetime] | None = field(default=None, compare=False)
+    # A newly stored event; used to re-derive downtime and to send live messages.
+    stored: StoredEvent | None = field(default=None, compare=False)
 
     def as_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {"event_id": self.event_id, "status": self.status}
@@ -56,7 +58,7 @@ def ingest_event(
 ) -> IngestResult:
     """Validate and store one event sent with `api_key`, then update downtime."""
     result = _ingest_one(api_key, data, received_at or timezone.now())
-    rebuild_after_ingestion([result.stored] if result.stored else [])
+    _after_store([result.stored] if result.stored else [])
     return result
 
 
@@ -64,8 +66,14 @@ def ingest_batch(api_key: LineApiKey, events: Sequence[object]) -> list[IngestRe
     """Ingest each event independently; one bad event never affects the others."""
     received_at = timezone.now()
     results = [_ingest_one(api_key, event, received_at) for event in events]
-    rebuild_after_ingestion([r.stored for r in results if r.stored])
+    _after_store([r.stored for r in results if r.stored])
     return results
+
+
+def _after_store(stored: list[StoredEvent]) -> None:
+    # Queued first so that, after commit, machine state messages go out before incident ones.
+    queue_after_ingestion(stored)
+    rebuild_after_ingestion([(event.machine_id, event.timestamp) for event in stored])
 
 
 def _ingest_one(api_key: LineApiKey, data: object, received_at: datetime) -> IngestResult:
@@ -102,8 +110,21 @@ def _ingest_one(api_key: LineApiKey, data: object, received_at: datetime) -> Ing
             return IngestResult("duplicate", event_id_text)
         raise
 
+    machine = validated["machine"]
+    event_type = validated["event_type"]
+    kind = (
+        "state"
+        if event_type in EVENT_TYPE_TO_STATE
+        else "count"
+        if event_type in PRODUCTION_EVENT_TYPES
+        else "other"
+    )
     return IngestResult(
-        "created", event_id_text, stored=(validated["machine"].pk, validated["timestamp"])
+        "created",
+        event_id_text,
+        stored=StoredEvent(
+            machine.pk, machine.line_id, validated["event_id"], validated["timestamp"], kind
+        ),
     )
 
 

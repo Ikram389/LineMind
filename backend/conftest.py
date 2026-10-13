@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 import pytest
+from django.core.cache import cache
 
 from apps.downtime.default_reasons import ensure_default_reasons
 from apps.production.services.ingestion import ingest_batch, ingest_event
@@ -21,6 +22,12 @@ from tests.lines import Bottling, create_bottling_line, read_fixture
 @pytest.fixture(autouse=True)
 def fast_password_hasher(settings: Any) -> None:
     settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+
+@pytest.fixture(autouse=True)
+def clear_cache() -> None:
+    """Tickets and live-update throttles live in the cache: start every test empty."""
+    cache.clear()
 
 
 @pytest.fixture

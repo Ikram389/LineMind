@@ -9,11 +9,12 @@ from fractions import Fraction
 from django.db.models import Max, Min
 from django.utils import timezone
 
-from apps.analytics.services.oee import DowntimeSpan, LineData, OrderSpan, Reading
+from apps.analytics.services.oee import DowntimeSpan, LineData, OrderSpan
 from apps.downtime.models import DowntimeEvent
 from apps.organizations.models import Machine, ProductionLine
 from apps.organizations.oee_settings import with_defaults
-from apps.production.models import IngestedEvent, ProductionEvent
+from apps.production.models import IngestedEvent
+from apps.production.services.counters import load_readings
 from apps.production.services.orders import active_orders, ideal_cycle_time
 from apps.production.services.shifts import ShiftPeriod, shift_periods
 from apps.production.services.timeset import TimeSet
@@ -52,19 +53,7 @@ def load_line_data(
         .select_related("current_classification__reason")
     )
 
-    readings = ProductionEvent.objects.filter(machine=machine)
-    baseline = (
-        readings.filter(timestamp__lte=start)
-        .order_by("-timestamp", "-event_id")
-        .values_list("timestamp", "count", "rejected")
-        .first()
-    )
-    in_range = readings.filter(timestamp__gt=start, timestamp__lte=end).order_by(
-        "timestamp", "event_id"
-    )
-    reading_rows = ([baseline] if baseline else []) + list(
-        in_range.values_list("timestamp", "count", "rejected")
-    )
+    readings = load_readings(machine, start, end)
 
     orders = tuple(
         OrderSpan(
@@ -90,7 +79,7 @@ def load_line_data(
         shift_time=shift_time,
         breaks=breaks,
         downtime=downtime,
-        readings=tuple(Reading(ts, count, rejected) for ts, count, rejected in reading_rows),
+        readings=tuple(readings),
         orders=orders,
         fallback_cycle_time=Fraction(3600, slowest) if slowest else None,
         first_seen=seen["first"],

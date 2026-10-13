@@ -46,6 +46,9 @@ Django apps live in `backend/apps/<name>/` (accounts, organizations, production,
 - Backfill today's morning shift (Algiers, 06:00 local = 05:00Z) after seed_demo: `docker compose run --rm simulator python main.py --scenario scenarios/normal_shift.yaml --mode backfill --start <today>T05:00:00Z` (must end in the past, i.e. after 14:00 Algiers)
 - Regenerate the downtime test fixtures (only if the simulator or scenarios change): `docker compose run --rm simulator python main.py --scenario scenarios/<name>.yaml --mode backfill --output file --file data/<name>.jsonl`, then copy to `backend/tests/fixtures/`
 - Frontend lint/typecheck: `docker compose exec frontend npm run lint` / `docker compose exec frontend npm run typecheck`
+- Frontend tests (Vitest): `docker compose exec frontend npm test`
+- After changing `frontend/package.json`: `docker compose up -d --build -V frontend` (`-V` renews the container's node_modules volume)
+- Dashboard: http://localhost:5173 (log in e.g. as `production_supervisor@demo-beverages.test`); live data: `docker compose run --rm simulator python main.py --scenario scenarios/labeler_jam.yaml --mode realtime`
 - Simulator tests/lint (no backend needed): `docker compose run --rm simulator pytest` / `docker compose run --rm simulator ruff check .`
 - Run the simulator (needs `SIMULATOR_API_KEY` in `.env`): `docker compose run --rm simulator python main.py --scenario scenarios/<name>.yaml --mode backfill --start 2026-10-05T06:00:00Z` (or `--mode accelerated --speed 60`, `--mode realtime`; `--output file` writes JSON Lines to `simulator/data/`)
 - The database is not exposed to the host; only the backend reaches it inside Docker.
@@ -131,6 +134,33 @@ Definitions, settings and their defaults are in `docs/PRODUCT.md` §4. Code:
   - Shifts, breaks, products, cycle times and orders: `apps/production/planning_views.py`.
   - Products are organization-wide (`scope_to_organization`, writes need `all_factories`).
   - Every configuration viewset uses `AuditedModelViewSetMixin` (`apps/audit/mixins.py`), including factories, lines and machines. Put the mixin *before* any mixin that defines `perform_destroy`.
+
+## Frontend and live updates
+- **Backend runs under ASGI.** `daphne` is first in `INSTALLED_APPS`, so `runserver` serves HTTP and WebSockets. `config/asgi.py` routes `/ws/...` to `apps/live/routing.py`.
+- **Redis** (the `redis` service, `REDIS_URL`) carries the channel layer and the cache. Without `REDIS_URL`, and in tests (`config/settings_test.py`), both are in-memory.
+- **WebSocket per line:** `/ws/lines/<id>/?ticket=…`.
+  - The ticket comes from `POST /api/v1/ws-ticket/` (JWT). It's single-use and lasts 30 s (`apps/live/tickets.py`).
+  - `LineConsumer` checks the line with `scope_to_user`: 4401 for a bad ticket, 4403 for no access.
+  - Messages only go server → browser.
+- **Broadcasting** (`apps/live/broadcast.py`) always happens after commit (`transaction.on_commit`). Every message has the envelope `{type, line_id, sent_at, data}`.
+  - `machine_state_changed`: only when the *current* state changed.
+  - `count_updated`: the newest count per request, at most one per machine every 5 s.
+  - `incident_opened`, `incident_updated`, `incident_closed`: only for ongoing incidents.
+
+  The ingestion service queues machine messages *before* calling the downtime rebuild, so they go out first. The REST `/lines/{id}/status/` (`production/services/line_status.py: machine_status`) and the messages use the same functions.
+- **Frontend layout** (`frontend/src/`):
+  - `api/`: typed client and endpoints. The access token is in memory; the refresh token is in localStorage for development only and moves to an httpOnly cookie before production. A 401 → one refresh → one retry.
+  - `i18n/en.ts`: all UI text. Never hard-code strings in components.
+  - `lib/`: time formatting in the factory's timezone, state styles, server clock.
+  - `live/useLineLive.ts`: ticket → socket → merges messages into the TanStack Query cache; backoff and reconnect.
+  - `components/`, `pages/`.
+- **Server time, not device time.** `lib/serverClock.ts` keeps an offset from WebSocket `sent_at` and HTTP `Date` headers. Stale detection and "time in state" use `serverNow()` / `useServerNow()`, never `Date.now()`.
+- **Live screen rules.**
+  - A machine with `last_seen` older than `stale_after_seconds` (server time) shows "unknown".
+  - Every state has a colour, an icon *and* written text.
+  - Alarms: shown prominently only while the machine is stopped; otherwise "Last alarm X · N min ago" if it happened during the current shift.
+  - While disconnected, the status is polled every 15 s; after reconnecting, everything is re-fetched.
+- **Demo modes.** Accelerated simulator mode ends at "now", so during the run the data lags real time and machines look stale. Use `--mode realtime` to watch the live screen.
 
 ## Non-negotiable rules
 1. **Tenant isolation.** Every query that returns organization data is filtered by the requesting user's organization and permitted factories, enforced on the server (querysets/permissions), never only in the UI. Every new endpoint gets a test proving a user from another organization gets 404/403.

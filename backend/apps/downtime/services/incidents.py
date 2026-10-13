@@ -24,7 +24,10 @@ from apps.downtime.models import (
     IncidentOrigin,
     LineStopIncident,
 )
+from apps.downtime.services.durations import duration_seconds
+from apps.downtime.services.incident_summary import incident_payload
 from apps.downtime.services.windows import Window
+from apps.live.broadcast import queue_incident_message
 from apps.organizations.models import ProductionLine
 
 
@@ -54,25 +57,75 @@ def group_events(events: Sequence[DowntimeEvent]) -> list[Cascade]:
 
 
 def regroup_incidents(line: ProductionLine, window: Window) -> None:
-    """Recompute the incidents of `line` around `window` (widened to whole cascades)."""
+    """Recompute the incidents of `line` around `window` (widened to whole cascades).
+
+    Live messages (sent after commit) only concern *ongoing* incidents: opened,
+    updated (members or first observed stop changed) and closed.
+    """
     events, span = _load_cascades(line, window)
 
     stale = {
         incident.key: incident
-        for incident in LineStopIncident.objects.filter(line=line).filter(
-            span.overlap_q("started_at", "ended_at")
+        for incident in LineStopIncident.objects.filter(line=line)
+        .filter(span.overlap_q("started_at", "ended_at"))
+        .prefetch_related("events")
+    }
+    ongoing_before = {
+        key: (
+            {e.pk for e in incident.events.all()},
+            incident.first_machine_id,
         )
+        for key, incident in stale.items()
+        if incident.ended_at is None
     }
     for cascade in group_events(events):
         incident = _save_cascade(line, cascade)
         stale.pop(incident.key, None)
+        _announce(line, incident, ongoing_before.get(incident.key))
     for incident in stale.values():
+        if incident.key in ongoing_before:
+            _announce_closed(line, incident)
         incident.delete()  # its former members were re-linked above (FK is SET_NULL)
 
     # Events that cannot be incident members never carry a link.
     DowntimeEvent.objects.filter(line=line).filter(span.overlap_q()).exclude(
         category__in=INCIDENT_CATEGORIES
     ).update(incident=None, is_first_stop=False)
+
+
+def _announce(
+    line: ProductionLine,
+    incident: LineStopIncident,
+    before: tuple[set[int], int | None] | None,
+) -> None:
+    ongoing = incident.ended_at is None
+    if before is None:
+        if ongoing:
+            queue_incident_message("incident_opened", line.id, incident_payload(incident))
+        return
+    if not ongoing:
+        _announce_closed(line, incident)
+        return
+    members = set(incident.events.values_list("pk", flat=True))
+    if members != before[0] or incident.first_machine_id != before[1]:
+        queue_incident_message("incident_updated", line.id, incident_payload(incident))
+
+
+def _announce_closed(line: ProductionLine, incident: LineStopIncident) -> None:
+    queue_incident_message(
+        "incident_closed",
+        line.id,
+        {
+            "incident_id": incident.id,
+            "started_at": incident.started_at,
+            "ended_at": incident.ended_at,
+            "duration_seconds": (
+                round(duration_seconds(incident.started_at, incident.ended_at), 3)
+                if incident.ended_at
+                else None
+            ),
+        },
+    )
 
 
 def _load_cascades(line: ProductionLine, window: Window) -> tuple[list[DowntimeEvent], Window]:

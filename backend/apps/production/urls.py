@@ -9,6 +9,7 @@ from apps.production.planning_views import (
     ShiftViewSet,
 )
 from apps.production.views import (
+    CurrentShiftView,
     EventBatchView,
     EventView,
     LineStatusView,
@@ -30,6 +31,11 @@ urlpatterns = [
         name="machine-production-events",
     ),
     path("lines/<int:line_id>/status/", LineStatusView.as_view(), name="line-status"),
+    path(
+        "factories/<int:factory_id>/current-shift/",
+        CurrentShiftView.as_view(),
+        name="factory-current-shift",
+    ),
 ]
 
 router = SimpleRouter()

@@ -11,9 +11,20 @@ services:
       timeout: 5s
       retries: 10
 
+  # Live updates: channel layer for WebSockets, cache for tickets and throttling.
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build: ./backend
     env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - ./backend:/app
     ports:
@@ -21,6 +32,8 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:

@@ -24,6 +24,8 @@ DEBUG = env_bool("DJANGO_DEBUG")
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 
 INSTALLED_APPS = [
+    # daphne first: makes `manage.py runserver` serve HTTP and WebSockets through ASGI.
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -37,6 +39,7 @@ INSTALLED_APPS = [
     "apps.audit",
     "apps.downtime",
     "apps.analytics",
+    "apps.live",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -107,6 +110,23 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
 }
+
+# Live updates (apps/live): Redis for the channel layer and the cache (tickets, throttling).
+# Without REDIS_URL everything stays in this process (fine for a single dev server).
+REDIS_URL = os.environ.get("REDIS_URL", "")
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [REDIS_URL]},
+        }
+    }
+    CACHES = {
+        "default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": REDIS_URL}
+    }
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 
 # Event ingestion (apps/production/services/ingestion.py)
 EVENT_MAX_FUTURE_SECONDS = 300  # reject events stamped more than 5 minutes in the future

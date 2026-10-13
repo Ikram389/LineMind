@@ -1,64 +1,54 @@
-import { useEffect, useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
-import { fetchHealth, type HealthResponse } from "./api/health.ts";
+import { AuthProvider } from "./auth/AuthProvider.tsx";
+import { RequireAuth } from "./auth/RequireAuth.tsx";
+import { LineOverviewPage } from "./pages/LineOverviewPage.tsx";
+import { LinePickerPage } from "./pages/LinePickerPage.tsx";
+import { LoginPage } from "./pages/LoginPage.tsx";
+import { MachineDetailPage } from "./pages/MachineDetailPage.tsx";
 
-type HealthState =
-  | { kind: "loading" }
-  | { kind: "loaded"; health: HealthResponse }
-  | { kind: "unreachable" };
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, staleTime: 5_000, refetchOnWindowFocus: true },
+  },
+});
 
-interface StatusRowProps {
-  label: string;
-  value: string;
-  ok: boolean;
-}
-
-function StatusRow({ label, value, ok }: StatusRowProps) {
+export default function App() {
   return (
-    <li className="status-row">
-      <span>{label}:</span>
-      <strong className={ok ? "status-ok" : "status-error"}>{value}</strong>
-    </li>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              path="/"
+              element={
+                <RequireAuth>
+                  <LinePickerPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/lines/:lineId"
+              element={
+                <RequireAuth>
+                  <LineOverviewPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/lines/:lineId/machines/:machineId"
+              element={
+                <RequireAuth>
+                  <MachineDetailPage />
+                </RequireAuth>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
-
-function App() {
-  const [state, setState] = useState<HealthState>({ kind: "loading" });
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchHealth(controller.signal)
-      .then((health) => setState({ kind: "loaded", health }))
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setState({ kind: "unreachable" });
-        }
-      });
-    return () => controller.abort();
-  }, []);
-
-  return (
-    <main className="app">
-      <h1>LineMind</h1>
-      {state.kind === "loading" && <p>Checking services…</p>}
-      {state.kind === "unreachable" && (
-        <ul className="status-list">
-          <StatusRow label="backend" value="unreachable" ok={false} />
-          <StatusRow label="database" value="unknown" ok={false} />
-        </ul>
-      )}
-      {state.kind === "loaded" && (
-        <ul className="status-list">
-          <StatusRow label="backend" value="ok" ok={true} />
-          <StatusRow
-            label="database"
-            value={state.health.database}
-            ok={state.health.database === "ok"}
-          />
-        </ul>
-      )}
-    </main>
-  );
-}
-
-export default App;

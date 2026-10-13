@@ -111,3 +111,9 @@ def shift_periods(
                     periods.append(period)
             day += timedelta(days=1)
     return sorted(periods, key=lambda p: (p.start, p.shift_id))
+
+
+def current_shift(factory: Factory, now: datetime) -> ShiftPeriod | None:
+    """The shift occurrence running at `now`, or None between shifts."""
+    running = [p for p in shift_periods(factory, now, now + timedelta(seconds=1)) if p.start <= now]
+    return running[0] if running else None

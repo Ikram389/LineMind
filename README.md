@@ -6,9 +6,10 @@ Manufacturing intelligence platform for bottling lines: production monitoring, d
 
 | Service    | What it is                          | URL on your machine                        |
 | ---------- | ----------------------------------- | ------------------------------------------ |
-| `frontend` | React + TypeScript (Vite dev server) | http://localhost:5173                      |
-| `backend`  | Django + Django REST Framework      | http://localhost:8000/api/v1/health/       |
+| `frontend` | React + TypeScript dashboard (Vite dev server) | http://localhost:5173           |
+| `backend`  | Django + DRF, served through ASGI (Daphne): REST API and WebSockets | http://localhost:8000/api/v1/health/ |
 | `db`       | PostgreSQL 16                       | internal only (not exposed to Windows)     |
+| `redis`    | Redis 7: live-update channel layer and cache | internal only                     |
 | `simulator`| Python factory simulator (run on demand, see below) | sends events to the backend |
 
 ## Prerequisites (Windows)
@@ -51,6 +52,7 @@ Your database data is kept in a Docker volume. `docker compose down -v` deletes 
 | Create an admin user         | `docker compose exec backend python manage.py createsuperuser`   |
 | Frontend lint                | `docker compose exec frontend npm run lint`                      |
 | Frontend type check          | `docker compose exec frontend npm run typecheck`                 |
+| Frontend tests               | `docker compose exec frontend npm test`                          |
 | Simulator tests              | `docker compose run --rm simulator pytest`                       |
 | Simulator lint               | `docker compose run --rm simulator ruff check .`                 |
 
@@ -95,7 +97,9 @@ Django admin: create a superuser (see the table above), then open http://localho
 | `/api/v1/machines/?line=<id>` | Machines, ordered by position |
 | `GET /api/v1/machines/{id}/state-events/?start=&end=` | State changes of a machine, ordered by timestamp (paginated: `limit`, `offset`) |
 | `GET /api/v1/machines/{id}/production-events/?start=&end=` | Counter readings of a machine, ordered by timestamp (paginated) |
-| `GET /api/v1/lines/{id}/status/` | Current state, last count and last-seen time of every machine on a line |
+| `GET /api/v1/lines/{id}/status/` | Every machine's current state, when it began (`state_since`), shift count, alarms and last-seen time, plus the open incident with its first observed stop |
+| `GET /api/v1/factories/{id}/current-shift/` | The shift running now (UTC start, end, breaks) or `null` |
+| `POST /api/v1/ws-ticket/` | A single-use, 30-second ticket for the live WebSocket `/ws/lines/{id}/?ticket=…` |
 | `GET /api/v1/downtime-events/` | Stops derived from machine states. Filters: `line`, `machine`, `factory`, `incident`, `category` (breakdown, blocked, starved, planned, no_data), `reason` (code), `classified=true/false`, `is_first_stop=true/false`, `start`/`end` |
 | `GET/POST /api/v1/downtime-events/{id}/classifications/` | Classification history (GET) or a new classification `{"reason": <id>, "comment": "..."}` (POST: operators, supervisors, factory managers, platform admins) |
 | `GET /api/v1/incidents/`, `GET /api/v1/incidents/{id}/` | Line stop incidents (cascades) with their **first observed stop** and, in the detail, all affected machines in time order. Filters: `line`, `origin`, `start`/`end` |
@@ -213,6 +217,33 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/v1/downtime-event
 ```
 
 If you change a factory's `minimum_stop_seconds` or `stale_after_seconds`, recompute the history with `rebuild_downtime --line <id>`. Classifications are kept.
+
+## Live line dashboard
+
+Open http://localhost:5173 and sign in, for example as `production_supervisor@demo-beverages.test` (the password is `DEMO_USER_PASSWORD` from `.env`). With only one line you go straight to its overview:
+
+- **Header:** the factory, line and current shift with the time left, plus a clock. All times are in the factory's timezone, which is shown.
+- **Machine cards:** the six machines in line order. Each shows its state (colour, icon *and* text), the time in that state, the shift count and the alarm.
+  - A machine without recent data shows **Unknown**.
+  - Click a card for its state timeline and its downtime this shift.
+- **Incident banner:** while the line is stopped, "Line stopped for … — first observed stop: Labeler (alarm E-204)" plus the affected machines. The first stop's card is outlined.
+- **OEE:** the current shift's OEE (refreshed every minute and when a stop starts or ends), the backend's notes, and an hourly chart.
+
+The screen updates live over a WebSocket. If the connection drops it shows "Live updates paused, reconnecting…", checks every 15 s, and recovers by itself.
+
+**Watch a jam happen** (about 15 minutes; the jam starts at minute 5):
+
+```powershell
+docker compose run --rm simulator python main.py --scenario scenarios/labeler_jam.yaml --mode realtime
+```
+
+What you'll see:
+1. The labeler turns red with alarm E-204.
+2. The capper turns amber "Blocked", the packer amber "Starved", then the filler, rinser and feeder are blocked.
+3. The banner names the labeler as the first observed stop.
+4. After 90 s everything returns to green.
+
+Use `--mode realtime` for this. In accelerated mode the simulated clock catches up with real time only at the end of the run, so while it runs the data looks out of date and machines show "Unknown".
 
 ## Factory simulator
 

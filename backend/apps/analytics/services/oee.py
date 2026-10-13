@@ -21,6 +21,7 @@ Counting rules:
 - A reading counts if its timestamp is in (window start, window end] and inside
   planned production time (end-inclusive, see TimeSet.contains_end_inclusive).
 - A counter that goes down was reset: the new value counts from zero (warning).
+  The counter rule itself is shared: apps/production/services/counters.py.
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from fractions import Fraction
 from typing import Any
 
 from apps.organizations.oee_settings import NO_DATA_EXCLUDED
+from apps.production.services.counters import Reading, counter_deltas
 from apps.production.services.timeset import TimeSet
 
 FAULT_CATEGORIES = frozenset({"breakdown", "blocked", "starved"})
@@ -49,13 +51,6 @@ class DowntimeSpan:
     end: datetime  # ongoing stops are closed at "now" by the loader
     category: str
     is_changeover: bool = False
-
-
-@dataclass(frozen=True)
-class Reading:
-    timestamp: datetime
-    count: int
-    rejected: int | None
 
 
 @dataclass(frozen=True)
@@ -230,44 +225,30 @@ def compute_inputs(data: LineData, start: datetime, end: datetime) -> OEEInputs:
 def _count(
     data: LineData, start: datetime, end: datetime, planned: TimeSet, inputs: OEEInputs
 ) -> None:
-    previous: Reading | None = None
-    for reading in data.readings:
-        counts = (
-            previous is not None
-            and start < reading.timestamp <= end
-            and planned.contains_end_inclusive(reading.timestamp)
-        )
-        if counts:
-            assert previous is not None
-            produced = reading.count - previous.count
-            if produced < 0:  # counter reset: the new value counts from zero
-                produced = reading.count
-                inputs.counter_resets += 1
-            if reading.rejected is None or previous.rejected is None:
-                rejected = 0
-                inputs.readings_without_rejects += 1
-            else:
-                rejected = reading.rejected - previous.rejected
-                if rejected < 0:
-                    rejected = reading.rejected
-            inputs.total_count += produced
-            inputs.rejected_count += rejected
-            inputs.readings_counted += 1
+    """Counter differences (the shared rule in production/services/counters.py) in planned time."""
+    for delta in counter_deltas(data.readings):
+        moment = delta.reading.timestamp
+        if not (start < moment <= end and planned.contains_end_inclusive(moment)):
+            continue
+        inputs.counter_resets += int(delta.was_reset)
+        inputs.readings_without_rejects += int(delta.rejects_missing)
+        inputs.total_count += delta.produced
+        inputs.rejected_count += delta.rejected
+        inputs.readings_counted += 1
 
-            order = next((o for o in data.orders if o.covers(reading.timestamp)), None)
-            if order is not None:
-                cycle_time = order.ideal_cycle_time
-                key, name = order.sku, order.name
-            else:
-                cycle_time = data.fallback_cycle_time or ZERO
-                key, name = "", "No product assigned (line nominal speed)"
-                inputs.unassigned_count += produced
-            inputs.ideal_production_seconds += cycle_time * produced
-            product = inputs.products.setdefault(
-                key, {"sku": key or None, "name": name, "ideal_cycle_time": cycle_time, "count": 0}
-            )
-            product["count"] += produced
-        previous = reading
+        order = next((o for o in data.orders if o.covers(moment)), None)
+        if order is not None:
+            cycle_time = order.ideal_cycle_time
+            key, name = order.sku, order.name
+        else:
+            cycle_time = data.fallback_cycle_time or ZERO
+            key, name = "", "No product assigned (line nominal speed)"
+            inputs.unassigned_count += delta.produced
+        inputs.ideal_production_seconds += cycle_time * delta.produced
+        product = inputs.products.setdefault(
+            key, {"sku": key or None, "name": name, "ideal_cycle_time": cycle_time, "count": 0}
+        )
+        product["count"] += delta.produced
 
 
 # --- Results -----------------------------------------------------------------------------
