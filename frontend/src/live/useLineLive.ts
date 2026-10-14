@@ -9,7 +9,7 @@
  *    with backoff (1, 2, 4 ... 30 s) and re-fetch everything once reconnected.
  */
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getWsTicket } from "../api/endpoints.ts";
 import { queryKeys } from "../api/queryKeys.ts";
@@ -101,12 +101,14 @@ export function applyLiveMessage(
       if (message.type === "incident_opened") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.oee(lineId) });
       }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.downtime });
       return;
     case "incident_closed":
       if (current && current.open_incident?.incident_id === message.data.incident_id) {
         queryClient.setQueryData(key, { ...current, open_incident: null });
       }
       void queryClient.invalidateQueries({ queryKey: queryKeys.oee(lineId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.downtime });
       return;
     default:
       // Unknown message: fall back to the full state from the REST API.
@@ -114,9 +116,17 @@ export function applyLiveMessage(
   }
 }
 
-export function useLineLive(lineId: number | null): LiveStatus {
+export function useLineLive(
+  lineId: number | null,
+  onMessage?: (message: LiveMessage) => void,
+): LiveStatus {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<LiveStatus>("connecting");
+  // Keep the latest callback without reconnecting when it changes.
+  const onMessageRef = useRef(onMessage);
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
 
   useEffect(() => {
     if (lineId === null) return;
@@ -158,7 +168,9 @@ export function useLineLive(lineId: number | null): LiveStatus {
       };
       ws.onmessage = (event: MessageEvent<string>) => {
         try {
-          applyLiveMessage(queryClient, lineId as number, JSON.parse(event.data) as LiveMessage);
+          const message = JSON.parse(event.data) as LiveMessage;
+          applyLiveMessage(queryClient, lineId as number, message);
+          onMessageRef.current?.(message);
         } catch {
           void queryClient.invalidateQueries({ queryKey: queryKeys.lineStatus(lineId as number) });
         }

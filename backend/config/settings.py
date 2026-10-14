@@ -132,6 +132,9 @@ else:
 EVENT_MAX_FUTURE_SECONDS = 300  # reject events stamped more than 5 minutes in the future
 EVENT_BATCH_MAX_SIZE = 500
 
+# Downtime CSV export (apps/downtime/views.py): larger requests must be narrowed.
+DOWNTIME_EXPORT_MAX_ROWS = 50_000
+
 # Tokens are signed with SECRET_KEY (the simplejwt default).
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),

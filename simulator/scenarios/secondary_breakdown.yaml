@@ -1,0 +1,22 @@
+name: secondary_breakdown
+description: >
+  The labeler jam from labeler_jam.yaml (M05 stops 5 minutes in, for 90 s), plus an
+  independent second fault: the filler (M03) breaks down 20 s later (alarm E-301, 50 s),
+  while the labeler's line stop is still open. The filler's breakdown joins the same
+  incident as a "secondary breakdown": it needs its own reason, and in the line view
+  the incident is still counted once, attributed to the labeler.
+line: ../config/bottling_line_1.yaml
+start: "2026-10-12T14:00:00Z"
+duration: 15m
+seed: 43
+tick_seconds: 1
+count_interval_seconds: 10
+defect_mode: exact
+buffers:
+  M03-M04: {capacity: 80, initial_level: 19}
+  M04-M05: {initial_level: 45}
+  M05-M06: {initial_level: 13}
+faults:
+  - {machine: M05, at: 5m, duration: 90s, alarm_code: E-204}
+  - {machine: M03, at: 320s, duration: 50s, alarm_code: E-301}
+defects: []

@@ -8,4 +8,11 @@ export const queryKeys = {
   currentShift: (factoryId: number) => ["currentShift", factoryId] as const,
   oee: (lineId: number) => ["oee", lineId] as const,
   machineDowntime: (machineId: number) => ["machineDowntime", machineId] as const,
+  /** Everything derived from downtime and its classification (refreshed after classifying). */
+  downtime: ["downtime"] as const,
+  downtimeAnalysis: (kind: string, params: unknown) => ["downtime", kind, params] as const,
+  unclassified: (lineId: number) => ["downtime", "unclassified", lineId] as const,
+  reasons: (factoryId: number, includeArchived = false) =>
+    ["reasons", factoryId, includeArchived] as const,
+  incident: (id: number) => ["incident", id] as const,
 };

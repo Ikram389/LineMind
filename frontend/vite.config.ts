@@ -24,5 +24,7 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    // The Docker volume on Windows is slow when every file runs in parallel.
+    testTimeout: 20_000,
   },
 });

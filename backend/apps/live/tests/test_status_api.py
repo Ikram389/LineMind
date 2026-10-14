@@ -143,3 +143,19 @@ def test_current_shift_is_tenant_scoped(bottling: Bottling, world: World, api: A
 
     assert api(world.users["other_manager"]).get(url).status_code == 404
     assert api(world.users["limited_operator"]).get(url).status_code == 404
+
+
+def test_shift_occurrences_endpoint(bottling: Bottling, world: World, api: ApiFactory) -> None:
+    factory = bottling.line.factory  # UTC
+    Shift.objects.create(factory=factory, name="Night", start_time=time(22), end_time=time(6))
+    url = f"/api/v1/factories/{factory.id}/shift-occurrences/"
+    params = {"start": "2026-10-12T00:00:00Z", "end": "2026-10-13T12:00:00Z"}
+
+    body = api(world.users["analyst"]).get(url, params).json()
+
+    assert [(o["label"], o["start"], o["end"]) for o in body] == [
+        ("Night 2026-10-11", "2026-10-11T22:00:00Z", "2026-10-12T06:00:00Z"),
+        ("Night 2026-10-12", "2026-10-12T22:00:00Z", "2026-10-13T06:00:00Z"),
+    ]
+    assert api(world.users["other_manager"]).get(url, params).status_code == 404
+    assert api(world.users["analyst"]).get(url, {"start": params["start"]}).status_code == 400

@@ -46,7 +46,9 @@ Django apps live in `backend/apps/<name>/` (accounts, organizations, production,
 - Backfill today's morning shift (Algiers, 06:00 local = 05:00Z) after seed_demo: `docker compose run --rm simulator python main.py --scenario scenarios/normal_shift.yaml --mode backfill --start <today>T05:00:00Z` (must end in the past, i.e. after 14:00 Algiers)
 - Regenerate the downtime test fixtures (only if the simulator or scenarios change): `docker compose run --rm simulator python main.py --scenario scenarios/<name>.yaml --mode backfill --output file --file data/<name>.jsonl`, then copy to `backend/tests/fixtures/`
 - Frontend lint/typecheck: `docker compose exec frontend npm run lint` / `docker compose exec frontend npm run typecheck`
-- Frontend tests (Vitest): `docker compose exec frontend npm test`
+- Frontend tests (Vitest): `docker compose exec frontend npm test` (one file: `docker compose exec frontend npx vitest run src/pages/DowntimePage.test.tsx`)
+- Downtime screens: http://localhost:5173/lines/<id>/downtime (Pareto, table, CSV), `/lines/<id>/unclassified` (queue), `/lines/<id>/reasons` (factory managers)
+- CSV export from the shell: `GET /api/v1/downtime-events/export.csv?line=<id>&start=ISO&end=ISO[&view=line]` (JWT)
 - After changing `frontend/package.json`: `docker compose up -d --build -V frontend` (`-V` renews the container's node_modules volume)
 - Dashboard: http://localhost:5173 (log in e.g. as `production_supervisor@demo-beverages.test`); live data: `docker compose run --rm simulator python main.py --scenario scenarios/labeler_jam.yaml --mode realtime`
 - Simulator tests/lint (no backend needed): `docker compose run --rm simulator pytest` / `docker compose run --rm simulator ruff check .`
@@ -161,6 +163,19 @@ Definitions, settings and their defaults are in `docs/PRODUCT.md` §4. Code:
   - Alarms: shown prominently only while the machine is stopped; otherwise "Last alarm X · N min ago" if it happened during the current shift.
   - While disconnected, the status is polled every 15 s; after reconnecting, everything is re-fetched.
 - **Demo modes.** Accelerated simulator mode ends at "now", so during the run the data lags real time and machines look stale. Use `--mode realtime` to watch the live screen.
+
+## Downtime analysis
+- **One place for the numbers.** `backend/apps/downtime/services/analysis.py` builds the analysed stops (`build_entries`) and is the only code that computes Pareto, summary, recurring stops and the "needs a reason" list. Durations are clipped to the requested range, ongoing stops count up to now, and sums use integer microseconds so the Pareto total always equals the summary total.
+- **Two views.**
+  - **Line view** (default): one entry per line stop incident, attributed to its first observed stop's machine, reason and alarm. Origin-unknown incidents are attributed to their earliest member. Use it to answer "why did the line lose time?".
+  - **Machine view**: every downtime event, including blocked and starved time on other machines, so the totals are larger. Use it to answer "what happened on each machine?". The API returns `view` and `view_note`, and the UI always shows which view is on.
+- **Planned and no_data** are excluded unless `include=planned,no_data` is passed. In the line view, overlapping stops of the same category are merged per line.
+- **Roles in an incident** (`role_in_incident`): `first_observed_stop`, `secondary_breakdown` (a breakdown that is not a first stop) or `consequence` (blocked/starved). The first two need a reason; consequences never do. Secondary breakdowns don't add a line-view entry, but recurring stops count them, and the summary reports `secondary_breakdowns`.
+- **Recurring stops**: breakdowns only, grouped by machine and reason (or alarm when unclassified), shown when the count reaches `Factory.recurring_stop_threshold` (default 3).
+- **Endpoints** (all need `start` and `end`, at most 92 days, tenant-scoped): `GET /api/v1/downtime/pareto/`, `/downtime/summary/`, `/downtime/recurring/`, `/downtime-events/` (filters: line, machine, category, reason or `unclassified`, alarm or `none`, classified, min/max_duration, `view=line`, `needs_reason=true`, ordering), `/downtime-events/export.csv`, `/downtime-events/{id}/suggested-reasons/`, `POST /downtime-events/bulk-classify/`, `/incidents/{id}/`, `/downtime-reasons/` (plus `archive`/`restore`), `/factories/{id}/shift-occurrences/`.
+- **Classification rules.** Bulk classification: supervisors, factory managers and platform admins; at most 200 stops; all-or-nothing; one audit entry per stop. Suggested reasons are frequency-based (no AI). Archived reasons can't be chosen. A reason that has been used can't be deleted (409): archive it instead.
+- **CSV export.** Factory-time timestamps with offsets, a UTF-8 BOM for Excel, cells starting with `= + - @` (or tab/CR) are prefixed with `'`, and more than `DOWNTIME_EXPORT_MAX_ROWS` (50,000) rows → 400.
+- **Frontend.** The filters live in the URL (`lib/downtimeFilters.ts`). Pages: `pages/DowntimePage.tsx`, `UnclassifiedPage.tsx`, `ReasonsPage.tsx`. Classification goes through `lib/useClassify.ts`. The prompt after a line stop comes from `live/useClassificationPrompts.ts`. Role checks for buttons are in `lib/permissions.ts`; the server enforces them anyway.
 
 ## Non-negotiable rules
 1. **Tenant isolation.** Every query that returns organization data is filtered by the requesting user's organization and permitted factories, enforced on the server (querysets/permissions), never only in the UI. Every new endpoint gets a test proving a user from another organization gets 404/403.

@@ -44,6 +44,7 @@ class FactorySerializer(serializers.ModelSerializer):
             "oee_settings",
             "stale_after_seconds",
             "escalation_after_seconds",
+            "recurring_stop_threshold",
             "created_at",
             "updated_at",
         ]

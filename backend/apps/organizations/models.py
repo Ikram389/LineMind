@@ -53,6 +53,11 @@ class Factory(models.Model):
         validators=[MinValueValidator(1)],
         help_text="A stop lasting longer than this is flagged for escalation to maintenance.",
     )
+    recurring_stop_threshold = models.PositiveIntegerField(
+        default=3,
+        validators=[MinValueValidator(2)],
+        help_text="A machine stopping this many times for the same reason (or alarm) is recurring.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

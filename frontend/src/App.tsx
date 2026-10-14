@@ -3,10 +3,13 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
 import { AuthProvider } from "./auth/AuthProvider.tsx";
 import { RequireAuth } from "./auth/RequireAuth.tsx";
+import { DowntimePage } from "./pages/DowntimePage.tsx";
 import { LineOverviewPage } from "./pages/LineOverviewPage.tsx";
 import { LinePickerPage } from "./pages/LinePickerPage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
 import { MachineDetailPage } from "./pages/MachineDetailPage.tsx";
+import { ReasonsPage } from "./pages/ReasonsPage.tsx";
+import { UnclassifiedPage } from "./pages/UnclassifiedPage.tsx";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +37,30 @@ export default function App() {
               element={
                 <RequireAuth>
                   <LineOverviewPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/lines/:lineId/downtime"
+              element={
+                <RequireAuth>
+                  <DowntimePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/lines/:lineId/unclassified"
+              element={
+                <RequireAuth>
+                  <UnclassifiedPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/lines/:lineId/reasons"
+              element={
+                <RequireAuth>
+                  <ReasonsPage />
                 </RequireAuth>
               }
             />

@@ -1,17 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { useParams } from "react-router";
 
 import { getLineStatus, getOee } from "../api/endpoints.ts";
 import { queryKeys } from "../api/queryKeys.ts";
+import { ClassifyPanel } from "../components/ClassifyPanel.tsx";
 import { Header } from "../components/Header.tsx";
 import { IncidentBanner } from "../components/IncidentBanner.tsx";
+import { LineNav } from "../components/LineNav.tsx";
 import { LiveIndicator } from "../components/LiveIndicator.tsx";
 import { MachineFlow } from "../components/MachineFlow.tsx";
 import { OeeHourlyChart } from "../components/OeeHourlyChart.tsx";
 import { OeePanel } from "../components/OeePanel.tsx";
 import { Panel } from "../components/Panel.tsx";
+import { QuickClassifyCard } from "../components/QuickClassifyCard.tsx";
 import { t } from "../i18n/t.ts";
+import type { ClassifyTarget } from "../lib/classifyTarget.ts";
+import { usePermissions } from "../lib/permissions.ts";
 import { serverNow, useServerNow } from "../lib/serverClock.ts";
+import { useClassificationPrompts } from "../live/useClassificationPrompts.ts";
 import { useLineLive } from "../live/useLineLive.ts";
 import { useLineContext } from "./useLineContext.ts";
 
@@ -21,7 +28,11 @@ const OEE_REFRESH_MS = 60_000;
 export function LineOverviewPage() {
   const lineId = Number(useParams().lineId);
   const nowMs = useServerNow();
-  const live = useLineLive(lineId);
+  const { prompts, onMessage, dismiss } = useClassificationPrompts();
+  const live = useLineLive(lineId, onMessage);
+  const { canClassify } = usePermissions();
+  const [panelFor, setPanelFor] = useState<ClassifyTarget | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
   const { line, factory, shift } = useLineContext(lineId);
 
   const status = useQuery({
@@ -62,6 +73,7 @@ export function LineOverviewPage() {
         nowMs={nowMs}
         live={<LiveIndicator status={live} />}
       />
+      <LineNav lineId={lineId} shift={shift.data} />
 
       {incident && <IncidentBanner incident={incident} nowMs={nowMs} />}
 
@@ -98,6 +110,38 @@ export function LineOverviewPage() {
           {oee.data && <OeeHourlyChart buckets={oee.data.buckets} zone={zone} />}
         </Panel>
       </div>
+
+      {saved && (
+        <p role="status" className="fixed bottom-4 left-4 rounded-lg bg-green-800 px-4 py-3 text-xl text-white">
+          {t("classify.saved", { reason: saved })}
+        </p>
+      )}
+      {canClassify && prompts[0] && (
+        <aside className="fixed bottom-4 right-4 z-30 w-[min(44rem,calc(100vw-2rem))]">
+          <QuickClassifyCard
+            key={prompts[0].id}
+            event={prompts[0]}
+            onMore={() => setPanelFor(prompts[0] ?? null)}
+            onLater={() => dismiss(prompts[0]?.id ?? 0)}
+            onDone={(reason) => {
+              setSaved(reason);
+              dismiss(prompts[0]?.id ?? 0);
+            }}
+          />
+        </aside>
+      )}
+      {panelFor && factory.data && (
+        <ClassifyPanel
+          events={[panelFor]}
+          factoryId={factory.data.id}
+          zone={zone}
+          onClose={() => setPanelFor(null)}
+          onSaved={(reason) => {
+            setSaved(reason);
+            dismiss(panelFor.id);
+          }}
+        />
+      )}
     </main>
   );
 }

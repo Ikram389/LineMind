@@ -77,7 +77,8 @@ async function refreshAccessToken(): Promise<boolean> {
   return true;
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+/** A request with the access token; one refresh and one retry on 401. */
+async function authorizedRequest(path: string, init: RequestInit, retry: boolean): Promise<Response> {
   const headers = new Headers(init.headers);
   if (init.body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -93,13 +94,24 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, retry = 
       refreshing ??= refreshAccessToken().finally(() => {
         refreshing = null;
       });
-      if (await refreshing) return apiFetch<T>(path, init, false);
+      if (await refreshing) return authorizedRequest(path, init, false);
     }
     forceLogout();
     throw new ApiError(401, await readBody(response));
   }
   if (!response.ok) throw new ApiError(response.status, await readBody(response));
+  return response;
+}
+
+export async function apiFetch<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  const response = await authorizedRequest(path, init, retry);
   return (await readBody(response)) as T;
+}
+
+/** Download a file (e.g. CSV) with the user's token; returns its contents. */
+export async function apiDownload(path: string): Promise<Blob> {
+  const response = await authorizedRequest(path, {}, true);
+  return response.blob();
 }
 
 /** For tests. */

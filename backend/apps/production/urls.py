@@ -15,6 +15,7 @@ from apps.production.views import (
     LineStatusView,
     MachineStateEventListView,
     ProductionEventListView,
+    ShiftOccurrencesView,
 )
 
 urlpatterns = [
@@ -35,6 +36,11 @@ urlpatterns = [
         "factories/<int:factory_id>/current-shift/",
         CurrentShiftView.as_view(),
         name="factory-current-shift",
+    ),
+    path(
+        "factories/<int:factory_id>/shift-occurrences/",
+        ShiftOccurrencesView.as_view(),
+        name="factory-shift-occurrences",
     ),
 ]
 

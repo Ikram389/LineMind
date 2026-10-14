@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.db.models import QuerySet
@@ -26,7 +26,7 @@ from apps.production.serializers import (
 )
 from apps.production.services.ingestion import ingest_batch, ingest_event
 from apps.production.services.line_status import get_line_status
-from apps.production.services.shifts import current_shift
+from apps.production.services.shifts import current_shift, shift_periods
 
 STATUS_CODES = {
     "created": status.HTTP_201_CREATED,
@@ -159,4 +159,34 @@ class CurrentShiftView(APIView):
                 "breaks": [{"start": start, "end": end} for start, end in shift.breaks],
                 "factory_timezone": factory.timezone,
             }
+        )
+
+
+class ShiftOccurrencesView(APIView):
+    """GET /api/v1/factories/{id}/shift-occurrences/?start=&end= — concrete shift periods
+    (for range pickers such as "last shift"), computed by the shift service."""
+
+    permission_classes = [IsAuthenticated, HasMembership]
+
+    def get(self, request: Request, factory_id: int) -> Response:
+        factories = scope_to_user(Factory.objects.all(), request.user, "pk")
+        factory = get_object_or_404(factories, pk=factory_id)
+        start = aware_datetime_param(request, "start")
+        end = aware_datetime_param(request, "end")
+        if start is None or end is None or end <= start:
+            raise ValidationError({"detail": "start and end (with a timezone) are required."})
+        if end - start > timedelta(days=31):
+            raise ValidationError({"detail": "The range may be at most 31 days."})
+        return Response(
+            [
+                {
+                    "shift_id": p.shift_id,
+                    "name": p.shift_name,
+                    "label": p.label,
+                    "local_date": p.local_date,
+                    "start": p.start,
+                    "end": p.end,
+                }
+                for p in shift_periods(factory, start, end)
+            ]
         )
