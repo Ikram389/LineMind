@@ -86,3 +86,24 @@ describe("AlertsPage", () => {
     expect(within(readOnly).queryByRole("button", { name: "Resolve…" })).toBeNull();
   });
 });
+
+describe("AlertsPage with every kind of alert", () => {
+  it("shows a maintenance overdue alert with a link to the action", async () => {
+    vi.spyOn(alerts, "listAlerts").mockResolvedValue({
+      count: 1, next: null, previous: null,
+      results: [
+        makeAlert({
+          id: 67, rule: { id: 7, rule_type: "maintenance_overdue", name: "Maintenance overdue" },
+          subject: { type: "maintenance_action", id: 2, key: "maintenance_action:2" },
+          machine: { id: 3, name: "Filler" }, message_key: "alert.maintenance_overdue",
+          message_values: { action_id: 2, title: "Filler valve inspection", machine: "Filler", due_date: "2026-10-13" },
+        }),
+      ],
+    });
+    renderWithProviders(<AlertsPage />, { route: "/alerts", path: "/alerts" });
+
+    const card = await screen.findByTestId("alert-67");
+    expect(within(card).getByRole("heading")).toHaveTextContent('Maintenance action #2 "Filler valve inspection" on Filler is overdue');
+    expect(within(card).getByRole("link", { name: "Open the maintenance action" })).toHaveAttribute("href", "/maintenance/2");
+  });
+});

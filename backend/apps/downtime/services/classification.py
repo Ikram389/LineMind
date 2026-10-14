@@ -144,3 +144,41 @@ def suggested_reasons(event: DowntimeEvent, limit: int = 6) -> list[DowntimeReas
     )
     reasons = {r.pk: r for r in active.filter(pk__in=ranked[:limit])}
     return [reasons[pk] for pk in ranked[:limit] if pk in reasons]
+
+
+def record_confirmed_diagnosis(
+    event: DowntimeEvent, reason: DowntimeReason, comment: str, user: User
+) -> DowntimeClassification:
+    """A technician's confirmed diagnosis applied to a stop (from a maintenance action).
+
+    A new classification with source "technician"; earlier ones (e.g. the operator's)
+    stay in the history and the raw observations are untouched. Permission to diagnose
+    is checked by the maintenance service (the action's assignee or a technician).
+    """
+    if event.is_obsolete:
+        raise ClassificationError("This downtime event no longer exists in the derived data.")
+    if reason.factory_id != event.line.factory_id or not reason.is_active:
+        raise ClassificationError("The reason must be an active reason of this factory.")
+    membership = get_membership(user)
+    with transaction.atomic():
+        event = DowntimeEvent.objects.select_for_update().get(pk=event.pk)
+        before = snapshot(event.current_classification)
+        classification = DowntimeClassification.objects.create(
+            downtime_event=event,
+            reason=reason,
+            comment=comment,
+            source=ClassificationSource.TECHNICIAN,
+            created_by=user,
+        )
+        event.current_classification = classification
+        event.save(update_fields=["current_classification", "updated_at"])
+        queue_evaluation([event.line_id], ["classification"])
+        record_audit(
+            user=user,
+            action="downtime.diagnosed",
+            entity=event,
+            organization=membership.organization if membership else None,
+            before=before,
+            after=snapshot(classification),
+        )
+    return classification

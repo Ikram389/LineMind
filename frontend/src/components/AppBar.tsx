@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, Wrench } from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router";
 
 import { getHealth, listAlerts } from "../api/alerts.ts";
+import { getMyOpenCount } from "../api/maintenance.ts";
 import { queryKeys } from "../api/queryKeys.ts";
 import { useAuth } from "../auth/context.ts";
 import { t } from "../i18n/t.ts";
@@ -44,6 +45,8 @@ export function AppBar() {
     refetchInterval: HEALTH_REFRESH_MS,
   });
   const openCount = open.data?.count ?? 0;
+  const mine = useQuery({ queryKey: queryKeys.myOpenActions, queryFn: getMyOpenCount, refetchInterval: HEALTH_REFRESH_MS });
+  const myCount = mine.data ?? 0;
 
   return (
     <>
@@ -57,12 +60,26 @@ export function AppBar() {
         <NavLink to="/alerts" className={link}>
           {openCount > 0 ? t("appbar.openAlerts", { count: openCount }) : t("appbar.alerts")}
         </NavLink>
+        <NavLink to="/maintenance" className={link}>
+          {t("appbar.maintenance")}
+        </NavLink>
         {canManageAlertRules && (
           <NavLink to="/alert-rules" className={link}>
             {t("appbar.rules")}
           </NavLink>
         )}
         <div className="ml-auto flex items-center gap-2">
+          {myCount > 0 && (
+            <Link
+              to="/maintenance?mine=true"
+              aria-label={t("appbar.myActions", { count: myCount })}
+              data-testid="my-actions-badge"
+              className="inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-lg font-bold text-gray-900"
+            >
+              <Wrench aria-hidden className="h-5 w-5" />
+              {myCount}
+            </Link>
+          )}
           <NotificationBell />
           <NavLink to="/settings" className={link}>
             {t("appbar.settings")}

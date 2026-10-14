@@ -252,6 +252,11 @@ export interface AlertSummary {
 
 export type AlertChanged = Envelope<"alert_opened" | "alert_updated" | "alert_resolved", AlertSummary>;
 
+export type MaintenanceUpdated = Envelope<
+  "maintenance_updated",
+  { action_id: number; status: string; title: string; machine_id: number; assignee_id: number | null; priority: string }
+>;
+
 /** Sent to the user's own socket (/ws/me/). */
 export type NotificationsChanged = Envelope<"notifications_changed", { unread_count: number }>;
 
@@ -261,4 +266,5 @@ export type LiveMessage =
   | IncidentChanged
   | IncidentClosed
   | QualityUpdated
-  | AlertChanged;
+  | AlertChanged
+  | MaintenanceUpdated;

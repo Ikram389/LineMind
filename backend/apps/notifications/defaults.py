@@ -68,6 +68,15 @@ DEFAULT_RULES: list[tuple[str, str, dict[str, Any], str, list[str], int | None, 
         None,
         [],
     ),
+    (
+        "Maintenance overdue",
+        RuleType.MAINTENANCE_OVERDUE,
+        {},
+        Severity.WARNING,
+        [SUPERVISOR, MANAGER],
+        None,
+        [],
+    ),
 ]
 
 

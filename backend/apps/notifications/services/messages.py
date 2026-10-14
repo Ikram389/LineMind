@@ -31,6 +31,11 @@ EMAIL_MESSAGES: dict[str, str] = {
     "alert.high_defect_rate_station": (
         "Defect rate at {station} {rate}% in the last {minutes} min (above {threshold}%)."
     ),
+    "alert.maintenance_overdue": (
+        'Maintenance action #{action_id} "{title}" on {machine} is overdue (due {due_date}).'
+    ),
+    "maintenance.assigned": "Maintenance action #{action_id} assigned to you: {title} ({machine}).",
+    "maintenance.completed": "Maintenance action #{action_id} is done: {title} ({machine}).",
     "alert.unclassified_stop": (
         "A stop at {machine} still has no reason {minutes} min after it ended."
     ),

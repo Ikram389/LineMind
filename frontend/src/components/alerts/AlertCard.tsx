@@ -7,6 +7,7 @@ import { acknowledgeAlert, resolveAlert } from "../../api/alerts.ts";
 import type { Alert, AlertSeverity } from "../../api/alertTypes.ts";
 import { ApiError } from "../../api/client.ts";
 import { queryKeys } from "../../api/queryKeys.ts";
+import { CreateActionButton } from "../maintenance/CreateActionDialog.tsx";
 import type { MessageKey } from "../../i18n/en.ts";
 import { t } from "../../i18n/t.ts";
 import { alertMessage, severityLabel, SEVERITY_STYLE, subjectHref } from "../../lib/alertText.ts";
@@ -97,6 +98,11 @@ export function AlertCard({ alert, nowMs, canResolve, highlighted, onOpenInciden
           ))}
       </div>
 
+      {alert.machine && (
+        <div className="mt-2">
+          <CreateActionButton source={{ source: "alert", id: alert.id }} compact />
+        </div>
+      )}
       {alert.status === "open" && alert.can_acknowledge && (
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <button

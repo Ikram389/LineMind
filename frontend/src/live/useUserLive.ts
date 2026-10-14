@@ -19,6 +19,7 @@ export function applyUserMessage(queryClient: QueryClient, message: Notification
     predicate: (query) => query.queryKey[1] !== "unread",
   });
   void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.myOpenActions });
 }
 
 export function useUserLive(enabled: boolean): void {

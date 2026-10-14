@@ -171,6 +171,7 @@ class DowntimeReason(models.Model):
 class ClassificationSource(models.TextChoices):
     OPERATOR = "operator", "Operator"
     SUPERVISOR = "supervisor", "Supervisor"
+    TECHNICIAN = "technician", "Technician (confirmed diagnosis)"
     AI = "ai", "AI suggestion"
 
 

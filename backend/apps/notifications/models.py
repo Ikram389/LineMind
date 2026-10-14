@@ -37,6 +37,7 @@ class RuleType(models.TextChoices):
     LOW_OEE = "low_oee", "Low OEE"
     HIGH_DEFECT_RATE = "high_defect_rate", "High defect rate"
     UNCLASSIFIED_STOPS = "unclassified_stops", "Unclassified stops"
+    MAINTENANCE_OVERDUE = "maintenance_overdue", "Maintenance overdue"
 
 
 class AlertRule(models.Model):
@@ -183,10 +184,22 @@ class DeliveryStatus(models.TextChoices):
 class NotificationReason(models.TextChoices):
     OPENED = "opened", "The alert opened"
     ESCALATED = "escalated", "Not acknowledged in time"
+    ASSIGNED = "assigned", "A maintenance action was assigned to you"
+    COMPLETED = "completed", "A maintenance action you reported is done"
 
 
 class Notification(models.Model):
-    alert = models.ForeignKey(Alert, on_delete=models.CASCADE, related_name="notifications")
+    """One delivery to one user on one channel: about an alert, or (with no alert) about
+    something else such as a maintenance action, described by its own message and link."""
+
+    alert = models.ForeignKey(
+        Alert, on_delete=models.CASCADE, null=True, blank=True, related_name="notifications"
+    )
+    severity = models.CharField(max_length=20, choices=Severity.choices, blank=True)
+    # Used when there is no alert (the alert's own key and values are used otherwise).
+    message_key = models.CharField(max_length=100, blank=True)
+    message_values = models.JSONField(default=dict, blank=True)
+    link = models.CharField(max_length=300, blank=True, help_text="A path in the web app.")
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications"
     )
@@ -207,7 +220,9 @@ class Notification(models.Model):
         ordering = ["-created_at", "-id"]
         constraints = [
             models.UniqueConstraint(
-                fields=["alert", "user", "channel", "reason"], name="one_notification_per_delivery"
+                fields=["alert", "user", "channel", "reason"],
+                condition=models.Q(alert__isnull=False),
+                name="one_notification_per_delivery",
             )
         ]
         indexes = [
@@ -215,7 +230,23 @@ class Notification(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"{self.channel} to user {self.user_id} for alert {self.alert_id}"
+        return f"{self.channel} to user {self.user_id}: {self.message_key or self.alert_id}"
+
+    @property
+    def effective_message_key(self) -> str:
+        return self.alert.message_key if self.alert_id else self.message_key
+
+    @property
+    def effective_message_values(self) -> dict:
+        return self.alert.message_values if self.alert_id else self.message_values
+
+    @property
+    def effective_severity(self) -> str:
+        return self.alert.severity if self.alert_id else self.severity
+
+    @property
+    def effective_link(self) -> str:
+        return f"/alerts?alert={self.alert_id}" if self.alert_id else self.link
 
 
 class MinimumSeverity(models.TextChoices):

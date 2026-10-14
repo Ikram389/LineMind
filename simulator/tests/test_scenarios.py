@@ -13,6 +13,8 @@ from tests.helpers import CONFIG_DIR, SCENARIOS_DIR, make_scenario
 BUNDLED = [
     "normal_shift",
     "labeler_jam",
+    "labeler_recurring_jams",
+    "labeler_after_fix",
     "reference_1h",
     "reference_quality_1h",
     "secondary_breakdown",
@@ -112,6 +114,19 @@ def test_buffer_overrides_apply() -> None:
         ({"defect_mode": "sometimes"}, "defect_mode"),
         ({"buffers": {"M01-M03": {"capacity": 5}}}, "unknown buffer"),
         ({"machines": {"M09": {"speed_per_hour": 100}}}, "unknown key(s): M09"),
+        ({"random_faults": [{"machine": "M05", "every": "40m", "duration": [1, 2]}]}, "[min, max]"),
+        (
+            {"random_faults": [{"machine": "M05", "every": [60, 40], "duration": [1, 2]}]},
+            "min <= max",
+        ),
+        (
+            {"random_faults": [{"machine": "M99", "every": [40, 60], "duration": [1, 2]}]},
+            "unknown machine",
+        ),
+        (
+            {"random_faults": [{"machine": "M05", "every": [40, 60], "duration": [1, 2], "x": 1}]},
+            "unknown key",
+        ),
         ({"machines": {"M06": {"name": "x"}}}, "unknown key(s): name"),
         ({"machines": {"M06": {"speed_per_hour": 0}}}, "greater than zero"),
         ({"buffers": {"M01-M02": {"initial_level": 60}}}, "initial_level"),
@@ -152,3 +167,37 @@ def test_yaml_datetime_start_is_accepted() -> None:
     scenario = make_scenario(start=datetime(2026, 10, 12, 10, tzinfo=UTC))
 
     assert scenario.start == datetime(2026, 10, 12, 10, tzinfo=UTC)
+
+
+def test_random_faults_are_reproducible_and_within_their_ranges() -> None:
+    spec = [
+        {
+            "machine": "M05",
+            "alarm_code": "E-204",
+            "every": ["40m", "60m"],
+            "duration": ["60s", "120s"],
+        }
+    ]
+    first = make_scenario(duration=48 * 3600, random_faults=spec, seed=5)
+    again = make_scenario(duration=48 * 3600, random_faults=spec, seed=5)
+    other = make_scenario(duration=48 * 3600, random_faults=spec, seed=6)
+
+    assert first.faults == again.faults
+    assert first.faults != other.faults
+    assert {(f.machine, f.alarm_code) for f in first.faults} == {("M05", "E-204")}
+    assert all(60 <= f.duration <= 120 for f in first.faults)
+    gaps = [
+        b.at - (a.at + a.duration) for a, b in zip(first.faults, first.faults[1:], strict=False)
+    ]
+    assert all(40 * 60 <= gap <= 60 * 60 for gap in gaps)
+    assert 40 <= len(first.faults) <= 72  # 48 h / (40-60 min + 1-2 min)
+
+
+def test_the_maintenance_scenarios_have_frequent_then_rare_jams() -> None:
+    before = load_scenario(SCENARIOS_DIR / "labeler_recurring_jams.yaml")
+    after = load_scenario(SCENARIOS_DIR / "labeler_after_fix.yaml")
+
+    assert before.duration == after.duration == 7 * 24 * 3600
+    assert 160 <= len(before.faults) <= 250
+    assert 12 <= len(after.faults) <= 30
+    assert {f.alarm_code for f in before.faults + after.faults} == {"E-204"}

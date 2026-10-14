@@ -119,6 +119,9 @@ export function applyLiveMessage(
     case "alert_resolved":
       void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
       return;
+    case "maintenance_updated":
+      void queryClient.invalidateQueries({ queryKey: queryKeys.maintenance });
+      return;
     case "quality_updated":
       // The overview card shows these numbers directly; other quality views refetch.
       queryClient.setQueryData(queryKeys.shiftQuality(lineId), message.data);

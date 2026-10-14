@@ -277,6 +277,15 @@ When a rule's condition becomes true, one **alert** opens, never duplicates. It 
 - **Escalation:** an alert nobody acknowledges within its time (default 15 min) is sent to the next people, e.g. factory managers.
 - **Background services:** `worker` and `beat` (Celery) check the rules every 30 seconds. If they stop, `/api/v1/health/` says `"alerts": "stale"` and supervisors see a red warning in the top bar.
 
+## Maintenance
+
+Any problem seen in LineMind can become a **maintenance action**: press **Create action** next to a line stop, an alert, a recurring stop, a defect or on a machine page. The form is filled in for you and the evidence is linked.
+
+- **Supervisors** assign it (the technician is notified) and set its priority and due date.
+- **Technicians** start it, log what they found and did (time and parts), record the **confirmed diagnosis** (optionally applied to the linked stops, with a preview first) and complete it. An action past its due date raises an alert.
+- **Before / after:** for a recurring problem, the action page compares stops per 10 hours of run time before and after the fix, so a quieter week doesn't look like an improvement. A supervisor then verifies whether the fix was effective.
+- Open **Maintenance** in the top bar. The wrench badge counts your open assigned actions.
+
 ## Factory simulator
 
 The simulator (`simulator/`) is a virtual bottling line: M01 Bottle feeder → M02 Rinser → M03 Filler → M04 Capper → M05 Labeler → M06 Packer, with a conveyor (buffer) between each pair. It plays a **scenario** (a YAML file in `simulator/scenarios/`) and sends the resulting machine events to the event API.

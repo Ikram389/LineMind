@@ -1,0 +1,16 @@
+name: labeler_recurring_jams
+description: >
+  A week with a recurring problem: the labeler (M05) jams with alarm E-204 after every
+  40-60 minutes of running, for 1-2 minutes each time (about 190 jams). Used to test the
+  before/after effectiveness of a maintenance action (build step 10b). No defects.
+  Counters are sent every 45 s (a machine silent for over 60 s counts as offline).
+line: ../config/bottling_line_1.yaml
+start: "2026-09-28T05:00:00Z"   # default backfill start; --start overrides it
+duration: 168h
+seed: 1010
+tick_seconds: 1
+count_interval_seconds: 45   # under the 60 s stale threshold, like a real connector
+defect_mode: exact
+random_faults:
+  - {machine: M05, alarm_code: E-204, every: [40m, 60m], duration: [60s, 120s]}
+defects: []

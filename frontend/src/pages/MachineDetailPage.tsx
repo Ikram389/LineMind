@@ -5,6 +5,7 @@ import { getLineStatus, listMachineDowntime } from "../api/endpoints.ts";
 import { queryKeys } from "../api/queryKeys.ts";
 import { DowntimeTable } from "../components/DowntimeTable.tsx";
 import { MachineCard } from "../components/MachineCard.tsx";
+import { MachineActions } from "../components/maintenance/MachineActions.tsx";
 import { Panel } from "../components/Panel.tsx";
 import { StateTimeline } from "../components/StateTimeline.tsx";
 import { t } from "../i18n/t.ts";
@@ -97,6 +98,8 @@ export function MachineDetailPage() {
       >
         {downtime.data && <DowntimeTable events={downtime.data.results} zone={zone} />}
       </Panel>
+
+      <MachineActions machineId={machineId} />
     </main>
   );
 }

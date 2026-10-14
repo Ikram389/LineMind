@@ -37,6 +37,8 @@ export function subjectHref(alert: Alert): string | null {
       return alert.machine ? `/lines/${line}/machines/${alert.machine.id}` : `/lines/${line}`;
     case "station":
       return `/lines/${line}/quality`;
+    case "maintenance_action":
+      return `/maintenance/${alert.subject.id ?? ""}`;
     default:
       return alert.rule.rule_type === "high_defect_rate" ? `/lines/${line}/quality` : `/lines/${line}`;
   }

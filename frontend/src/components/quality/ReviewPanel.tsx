@@ -6,6 +6,7 @@ import { ApiError } from "../../api/client.ts";
 import { getReviews, listDefectTypes, reviewResult } from "../../api/quality.ts";
 import type { InspectionResult, Verdict } from "../../api/qualityTypes.ts";
 import { queryKeys } from "../../api/queryKeys.ts";
+import { CreateActionButton } from "../maintenance/CreateActionDialog.tsx";
 import type { MessageKey } from "../../i18n/en.ts";
 import { t } from "../../i18n/t.ts";
 import { reviewLabel } from "../../lib/qualityFormat.ts";
@@ -90,6 +91,9 @@ export function ReviewPanel({ result, zone, canReview, onClose, onSaved }: Revie
             </p>
             {result.context?.incident && <p className="text-lg text-gray-700">{result.context.incident.text}</p>}
             <p className="text-lg font-semibold">{t("review.current", { verdict: reviewLabel(result) })}</p>
+            <div className="mt-2">
+              <CreateActionButton source={{ source: "inspection_result", id: result.id }} compact />
+            </div>
           </div>
           <button type="button" onClick={onClose} aria-label={t("review.close")} className="p-2">
             <X aria-hidden className="h-8 w-8" />

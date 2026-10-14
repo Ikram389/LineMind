@@ -6,6 +6,7 @@ Paths inside a scenario (`line:`) are relative to the scenario file.
 
 from __future__ import annotations
 
+import random
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -32,6 +33,7 @@ SCENARIO_KEYS = frozenset(
         "machines",
         "buffers",
         "faults",
+        "random_faults",
         "planned_stops",
         "sensor_dropouts",
         "defects",
@@ -196,7 +198,15 @@ def parse_scenario(data: dict[str, Any], base_dir: Path, source: str = "scenario
         tick_seconds=tick,
         count_interval_seconds=count_interval,
         defect_mode=defect_mode,
-        faults=tuple(_parse_fault(item, ctx) for item in data.get("faults") or []),
+        faults=tuple(
+            sorted(
+                [
+                    *(_parse_fault(item, ctx) for item in data.get("faults") or []),
+                    *_expand_random_faults(data.get("random_faults") or [], ctx, data["seed"]),
+                ],
+                key=lambda f: (f.at, f.machine),
+            )
+        ),
         planned_stops=tuple(
             _parse_planned_stop(item, ctx) for item in data.get("planned_stops") or []
         ),
@@ -300,6 +310,44 @@ def _parse_fault(item: dict[str, Any], ctx: _Context) -> Fault:
     at, duration = ctx.window(item, "fault")
     alarm = item.get("alarm_code")
     return Fault(ctx.machine(item.get("machine")), at, duration, str(alarm) if alarm else None)
+
+
+def _range(item: dict[str, Any], key: str, ctx: _Context) -> tuple[int, int]:
+    raw = item.get(key)
+    if not isinstance(raw, list) or len(raw) != 2:
+        raise ScenarioError(
+            f"{ctx.source}: random_faults.{key} must be [min, max], e.g. [40m, 60m]."
+        )
+    low, high = (parse_duration(v, f"random_faults.{key}", ctx.source) for v in raw)
+    if not 0 < low <= high:
+        raise ScenarioError(f"{ctx.source}: random_faults.{key} needs 0 < min <= max.")
+    return low, high
+
+
+def _expand_random_faults(items: list[dict[str, Any]], ctx: _Context, seed: Any) -> list[Fault]:
+    """Faults at random but reproducible times: after each fault ends, the machine runs
+    for a random time in `every` before the next one, which lasts a random `duration`.
+    Uses its own generator (seeded from the scenario seed), so defects are unaffected."""
+    faults: list[Fault] = []
+    for index, item in enumerate(items):
+        _check_keys(item, frozenset({"machine", "alarm_code", "every", "duration"}), ctx.source)
+        machine = ctx.machine(item.get("machine"))
+        every = _range(item, "every", ctx)
+        duration = _range(item, "duration", ctx)
+        alarm = item.get("alarm_code")
+        rng = random.Random(f"{seed}|random_faults|{index}")
+        tick = ctx.tick
+        at = 0
+        while True:
+            at += rng.randint(*every) // tick * tick
+            length = max(tick, rng.randint(*duration) // tick * tick)
+            if at >= ctx.duration:
+                break
+            faults.append(
+                Fault(machine, at, min(length, ctx.duration - at), str(alarm) if alarm else None)
+            )
+            at += length
+    return faults
 
 
 def _parse_planned_stop(item: dict[str, Any], ctx: _Context) -> PlannedStop:

@@ -196,7 +196,13 @@ export function DowntimePage() {
           )}
         </Panel>
         <Panel isLoading={recurring.isLoading} isError={recurring.isError}>
-          {recurring.data && <RecurringPanel recurring={recurring.data} zone={zone} />}
+          {recurring.data && (
+            <RecurringPanel
+              recurring={recurring.data}
+              zone={zone}
+              range={effective.start && effective.end ? { start: effective.start, end: effective.end } : undefined}
+            />
+          )}
         </Panel>
       </div>
 

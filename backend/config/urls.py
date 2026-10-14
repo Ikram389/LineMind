@@ -14,6 +14,7 @@ urlpatterns = [
     path("api/v1/", include("apps.downtime.urls")),
     path("api/v1/", include("apps.quality.urls")),
     path("api/v1/", include("apps.notifications.urls")),
+    path("api/v1/", include("apps.maintenance.urls")),
     path("api/v1/", include("apps.analytics.urls")),
     path("api/v1/", include("apps.live.urls")),
 ]

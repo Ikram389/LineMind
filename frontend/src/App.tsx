@@ -11,6 +11,8 @@ import { LineOverviewPage } from "./pages/LineOverviewPage.tsx";
 import { LinePickerPage } from "./pages/LinePickerPage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
 import { MachineDetailPage } from "./pages/MachineDetailPage.tsx";
+import { MaintenanceActionPage } from "./pages/MaintenanceActionPage.tsx";
+import { MaintenancePage } from "./pages/MaintenancePage.tsx";
 import { QualityPage } from "./pages/QualityPage.tsx";
 import { QualitySetupPage } from "./pages/QualitySetupPage.tsx";
 import { ReasonsPage } from "./pages/ReasonsPage.tsx";
@@ -42,6 +44,8 @@ export default function App() {
               <Route path="/alerts" element={<AlertsPage />} />
               <Route path="/alert-rules" element={<AlertRulesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/maintenance" element={<MaintenancePage />} />
+              <Route path="/maintenance/:actionId" element={<MaintenanceActionPage />} />
               <Route path="/lines/:lineId" element={<LineOverviewPage />} />
               <Route path="/lines/:lineId/downtime" element={<DowntimePage />} />
               <Route path="/lines/:lineId/unclassified" element={<UnclassifiedPage />} />

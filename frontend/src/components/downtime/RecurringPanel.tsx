@@ -1,8 +1,18 @@
 import type { RecurringResponse } from "../../api/analysisTypes.ts";
 import { t } from "../../i18n/t.ts";
+import { CreateActionButton } from "../maintenance/CreateActionDialog.tsx";
 import { formatDateTime, formatDuration } from "../../lib/time.ts";
 
-export function RecurringPanel({ recurring, zone }: { recurring: RecurringResponse; zone: string }) {
+export function RecurringPanel({
+  recurring,
+  zone,
+  range,
+}: {
+  recurring: RecurringResponse;
+  zone: string;
+  /** The analysed range, so "Create action" links the stops of that range. */
+  range?: { start: string; end: string };
+}) {
   return (
     <section className="rounded-xl bg-white p-4 shadow-sm">
       <h2 className="text-xl font-semibold">{t("recurring.title")}</h2>
@@ -31,6 +41,20 @@ export function RecurringPanel({ recurring, zone }: { recurring: RecurringRespon
                   time: formatDateTime(item.last_occurrence, zone),
                 })}
               </p>
+              {range && (
+                <div className="mt-2">
+                  <CreateActionButton
+                    compact
+                    source={{
+                      source: "recurring",
+                      machine: item.machine.id,
+                      ...(item.reason ? { reason: item.reason.id } : { alarm: item.alarm_code ?? "" }),
+                      start: range.start,
+                      end: range.end,
+                    }}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>

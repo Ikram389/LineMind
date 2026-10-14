@@ -167,11 +167,29 @@ class NoteSerializer(serializers.Serializer):
 
 
 class NotificationSerializer(serializers.ModelSerializer):
+    """Alert or not, every notification has a message (key + values), a severity and a link."""
+
     alert = AlertSerializer(read_only=True)
+    message_key = serializers.CharField(source="effective_message_key", read_only=True)
+    message_values = serializers.JSONField(source="effective_message_values", read_only=True)
+    severity = serializers.CharField(source="effective_severity", read_only=True)
+    link = serializers.CharField(source="effective_link", read_only=True)
 
     class Meta:
         model = Notification
-        fields = ["id", "alert", "channel", "reason", "status", "read_at", "created_at"]
+        fields = [
+            "id",
+            "alert",
+            "message_key",
+            "message_values",
+            "severity",
+            "link",
+            "channel",
+            "reason",
+            "status",
+            "read_at",
+            "created_at",
+        ]
 
 
 class NotificationPreferenceSerializer(serializers.ModelSerializer):

@@ -10,7 +10,8 @@ export type RuleType =
   | "machine_offline"
   | "low_oee"
   | "high_defect_rate"
-  | "unclassified_stops";
+  | "unclassified_stops"
+  | "maintenance_overdue";
 export const RULE_TYPES: RuleType[] = [
   "long_stop",
   "recurring_stop",
@@ -18,6 +19,7 @@ export const RULE_TYPES: RuleType[] = [
   "low_oee",
   "high_defect_rate",
   "unclassified_stops",
+  "maintenance_overdue",
 ];
 
 export type MessageValues = Record<string, string | number | null>;
@@ -51,9 +53,15 @@ export interface Alert {
 
 export interface AppNotification {
   id: number;
-  alert: Alert;
+  /** Empty for notifications about something else (e.g. a maintenance action). */
+  alert: Alert | null;
+  message_key: string;
+  message_values: MessageValues;
+  severity: AlertSeverity;
+  /** Where to open it in the app. */
+  link: string;
   channel: "in_app";
-  reason: "opened" | "escalated";
+  reason: "opened" | "escalated" | "assigned" | "completed";
   status: string;
   read_at: string | null;
   created_at: string;

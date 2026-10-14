@@ -16,6 +16,8 @@ def alert_link(alert_id: int) -> str:
 
 
 def build_email(notification: Notification) -> EmailMultiAlternatives:
+    if notification.alert_id is None:
+        return _build_generic_email(notification)
     alert = notification.alert
     zone = ZoneInfo(alert.factory.timezone)
     what = render_message(alert.message_key, alert.message_values)
@@ -32,21 +34,44 @@ def build_email(notification: Notification) -> EmailMultiAlternatives:
         ("Since", f"{since} ({alert.factory.timezone})"),
         ("Severity", severity),
     ]
-    link = alert_link(alert.pk)
     intro = (
         "This alert has not been acknowledged in time."
         if escalated
         else "A new alert needs attention."
     )
+    return _email(notification, subject, intro, rows, alert_link(alert.pk), "Open the alert")
+
+
+def _build_generic_email(notification: Notification) -> EmailMultiAlternatives:
+    """A notification that is not about an alert (e.g. a maintenance action)."""
+    values = notification.message_values
+    what = render_message(notification.message_key, values)
+    rows = [(label, values[key]) for key, label in GENERIC_ROWS if values.get(key)]
+    rows.insert(0, ("What", what))
+    link = f"{settings.FRONTEND_URL}{notification.link}"
+    return _email(notification, f"[LineMind] {what}"[:200], what, rows, link, "Open it")
+
+
+GENERIC_ROWS = [("line", "Line"), ("machine", "Machine"), ("title", "Title"), ("due_date", "Due")]
+
+
+def _email(
+    notification: Notification,
+    subject: str,
+    intro: str,
+    rows: list[tuple[str, object]],
+    link: str,
+    link_text: str,
+) -> EmailMultiAlternatives:
     text = "\n".join(
-        [intro, "", *(f"{k}: {v}" for k, v in rows), "", f"Open it in LineMind: {link}"]
+        [intro, "", *(f"{k}: {v}" for k, v in rows), "", f"{link_text} in LineMind: {link}"]
     )
     html = (
         f"<p>{escape(intro)}</p><table>"
         + "".join(
             f"<tr><th align='left'>{escape(k)}</th><td>{escape(str(v))}</td></tr>" for k, v in rows
         )
-        + f"</table><p><a href='{escape(link)}'>Open the alert in LineMind</a></p>"
+        + f"</table><p><a href='{escape(link)}'>{escape(link_text)} in LineMind</a></p>"
     )
     email = EmailMultiAlternatives(
         subject, text, settings.DEFAULT_FROM_EMAIL, [notification.user.email]

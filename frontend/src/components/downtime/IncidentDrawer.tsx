@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 
 import { getIncident } from "../../api/downtime.ts";
+import { CreateActionButton } from "../maintenance/CreateActionDialog.tsx";
 import { queryKeys } from "../../api/queryKeys.ts";
 import type { MessageKey } from "../../i18n/en.ts";
 import { t } from "../../i18n/t.ts";
@@ -46,6 +47,9 @@ export function IncidentDrawer({ incidentId, zone, onClose }: { incidentId: numb
                 {formatDateTime(incident.data.started_at, zone)} · {formatDuration(incident.data.duration_seconds)}
               </p>
             )}
+            <div className="mt-2">
+              <CreateActionButton source={{ source: "incident", id: incidentId }} />
+            </div>
           </div>
           <button type="button" onClick={onClose} aria-label={t("drawer.close")} className="p-2">
             <X aria-hidden className="h-8 w-8" />

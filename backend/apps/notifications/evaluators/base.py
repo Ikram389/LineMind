@@ -29,6 +29,7 @@ INGESTION = "ingestion"  # any event stored for the line
 DOWNTIME = "downtime"  # state events stored: downtime/incidents were re-derived
 QUALITY = "quality"  # defects stored or a quality review saved
 CLASSIFICATION = "classification"  # a stop was classified
+MAINTENANCE = "maintenance"  # a maintenance action changed
 
 
 @dataclass(frozen=True)

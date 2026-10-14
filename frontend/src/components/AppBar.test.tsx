@@ -20,7 +20,13 @@ beforeEach(() => {
     count: 1,
     next: null,
     previous: null,
-    results: [{ id: 7, alert: makeAlert(), channel: "in_app", reason: "opened", status: "sent", read_at: null, created_at: "2026-10-14T09:06:00Z" }],
+    results: [
+      {
+        id: 7, alert: makeAlert(), message_key: "alert.long_stop", message_values: makeAlert().message_values,
+        severity: "warning", link: "/alerts?alert=31", channel: "in_app", reason: "opened", status: "sent",
+        read_at: null, created_at: "2026-10-14T09:06:00Z",
+      },
+    ],
   });
 });
 

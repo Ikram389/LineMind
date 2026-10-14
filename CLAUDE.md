@@ -55,6 +55,9 @@ Django apps live in `backend/apps/<name>/` (accounts, organizations, production,
 - Is the alert engine running? `GET /api/v1/health/` reports `"alerts": "ok"` or `"stale"` (no evaluation for 2 min); supervisors and above also see a red warning in the top bar
 - Evaluate all alert rules once by hand: `docker compose exec backend python manage.py shell -c "from apps.notifications.tasks import evaluate_periodic; print(evaluate_periodic())"`
 - After changing backend requirements (e.g. Celery): `docker compose up -d --build backend worker beat`
+- After changing backend code: `docker compose restart worker beat` (unlike the dev server, Celery does not reload by itself; a stale worker runs old code against the new database)
+- Maintenance (step 10b): http://localhost:5173/maintenance (list; technicians see "My actions") and `/maintenance/<id>` (steps, evidence, work log, diagnosis, before/after). "Create action" buttons are on line stops, alerts, recurring stops, defects and machine pages
+- Effectiveness demo data (7 days each, ~10 min to send; nothing else must cover these dates): `docker compose run --rm simulator python main.py --scenario scenarios/labeler_recurring_jams.yaml --mode backfill` (2026-09-28 → 10-05), complete the action with fix date 2026-10-05 05:00 UTC, then the same with `scenarios/labeler_after_fix.yaml` (10-05 → 10-12)
 - Quality endpoints (JWT; range required): `GET /api/v1/quality/summary|pareto|trend/?line=<id>&start=ISO&end=ISO`, `GET /api/v1/inspection-results/[export.csv]`, `POST /api/v1/inspection-results/<id>/reviews/`
 - After changing `frontend/package.json`: `docker compose up -d --build -V frontend` (`-V` renews the container's node_modules volume)
 - Dashboard: http://localhost:5173 (log in e.g. as `production_supervisor@demo-beverages.test`); live data: `docker compose run --rm simulator python main.py --scenario scenarios/labeler_jam.yaml --mode realtime`
@@ -227,6 +230,33 @@ Code lives in `backend/apps/notifications/` (step 10a).
   - Resolve: supervisors and above, with a note.
 - **Text.** Alerts store `message_key` + `message_values`. The UI translates them (`en.ts`, keys `alert.*`); emails use `services/messages.py`. Keep both in sync.
 - **Tests.** `apps/notifications/tests/` uses explicit `now` values (`support.T`) and the `day_shift`, `make_rule` and `evaluate` fixtures. Celery runs eagerly in tests (`settings_test.py`).
+
+## Maintenance
+Code lives in `backend/apps/maintenance/` (step 10b). Lightweight, not a CMMS: no inventory, purchasing or preventive schedules.
+- **Workflow** (`services/workflow.py`, the `STEPS` table):
+  - the path is requested → assigned → in_progress ⇄ waiting → done → verified;
+  - cancel is possible before done; reopen goes from done or verified back to in_progress;
+  - cancel, reopen and wait need a note.
+  - Anything else is 400; a wrong role is 403.
+  - Every step writes a `MaintenanceStatusChange` and an AuditLog entry, sends `maintenance_updated` to the line after commit, and re-checks the `maintenance_overdue` rule.
+  - Verify only through `verify()`, with a result.
+  - `allowed_steps()` tells the UI which buttons to show.
+- **Roles** (`services/permissions.py`):
+  - Request: everyone except analysts.
+  - Assign, priority, due date, cancel, verify: supervisors and above.
+  - Work (start, log, diagnose, complete): the assignee or any technician of the factory.
+- **Links** (`services/links.py`) only point at observations (stops, incidents, alerts, defects) plus at most one **signature** (machine + reason or alarm). Each must be in the action's factory. `prefill()` builds the "create from" form for each source.
+- **Confirmed diagnosis** (`services/diagnosis.py`):
+  - A `MaintenanceDiagnosis` row; the newest is current.
+  - "Apply to linked stops" adds a new `technician` classification per stop through `downtime.services.classification.record_confirmed_diagnosis`. The operator's classification stays in the history, and raw events are never touched.
+  - `preview()` counts the stops first: unclassified, already this reason, same category, other reasons. By default only unclassified and same-category stops change; other categories need `replace_other_reasons`.
+- **Effectiveness** (`services/effectiveness.py`, the only place it's computed):
+  - Compares windows of `effectiveness_window_days` before and after `fixed_at` (the fix date; default the completion time, can be earlier).
+  - Occurrences and downtime come from step 8 `select_entries` (machine view, breakdowns, signature); run time comes from the step 6 OEE `run_seconds`. Both are counted per 10 run hours.
+  - `MARGIN` (±20%) and `MIN_BEFORE_OCCURRENCES` (5) are constants. Under `min_after_run_hours`, or with too few occurrences before, the result is `not_enough_data` with a reason.
+  - The wording is an observation, never proof.
+- **Notifications** reuse step 10a: `Notification.alert` is optional and `notify_users()` sends messages that aren't about an alert. The assignee is told on assignment (severity from priority: urgent → critical, high → warning, else info); the reporter is told on completion. The `maintenance_overdue` rule type lives in `notifications/evaluators/rules.py` and is never suppressed by shifts.
+- **Tests.** Fixtures `labeler_recurring_jams_24h` and `labeler_after_fix_24h` (1 day each, consecutive at 2026-09-30 05:00; counters every 45 s, so they pass with the normal 60 s stale threshold — never relax it to make simulator data fit). Use the `new_action(status, ...)` and `all_day_shift` fixtures.
 
 ## Non-negotiable rules
 1. **Tenant isolation.** Every query that returns organization data is filtered by the requesting user's organization and permitted factories, enforced on the server (querysets/permissions), never only in the UI. Every new endpoint gets a test proving a user from another organization gets 404/403.

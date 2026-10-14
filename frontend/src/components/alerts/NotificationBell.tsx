@@ -59,16 +59,17 @@ export function NotificationBell() {
             {(latest.data?.results ?? []).map((n) => (
               <li key={n.id}>
                 <Link
-                  to={`/alerts?alert=${n.alert.id}`}
+                  to={n.link}
                   onClick={() => {
                     if (!n.read_at) readOne.mutate(n.id);
                     setOpen(false);
                   }}
-                  className={`block rounded-lg border-l-4 p-2 ${SEVERITY_STYLE[n.alert.severity]} ${n.read_at ? "opacity-70" : "font-semibold"}`}
+                  className={`block rounded-lg border-l-4 p-2 ${SEVERITY_STYLE[n.severity]} ${n.read_at ? "opacity-70" : "font-semibold"}`}
                 >
-                  <span className="block text-lg">{alertMessage(n.alert.message_key, n.alert.message_values)}</span>
+                  <span className="block text-lg">{alertMessage(n.message_key, n.message_values)}</span>
                   <span className="text-base">
-                    {n.alert.line?.name ?? ""} · {formatTime(n.created_at, n.alert.factory_timezone)}
+                    {n.alert?.line?.name ?? String(n.message_values.line ?? "")} ·{" "}
+                    {formatTime(n.created_at, n.alert?.factory_timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)}
                     {n.reason === "escalated" && ` · ${t("bell.escalated")}`}
                   </span>
                 </Link>

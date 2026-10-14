@@ -30,4 +30,9 @@ export const queryKeys = {
   ruleTypes: ["ruleTypes"] as const,
   preferences: ["preferences"] as const,
   health: ["health"] as const,
+  /** Everything about maintenance actions (refreshed by maintenance_updated messages). */
+  maintenance: ["maintenance"] as const,
+  maintenanceList: (params: unknown) => ["maintenance", "list", params] as const,
+  maintenanceAction: (id: number) => ["maintenance", "action", id] as const,
+  myOpenActions: ["maintenance", "mine"] as const,
 };

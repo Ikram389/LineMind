@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from django.db.models import Max
 from rest_framework import serializers
@@ -16,6 +17,7 @@ from apps.notifications.evaluators.base import (
     CLASSIFICATION,
     DOWNTIME,
     INGESTION,
+    MAINTENANCE,
     QUALITY,
     EvaluationContext,
     Finding,
@@ -430,6 +432,61 @@ class UnclassifiedStops(RuleEvaluator):
         ]
 
 
+# --- maintenance_overdue -------------------------------------------------------------------
+
+
+class MaintenanceOverdueParams(serializers.Serializer):
+    pass
+
+
+class MaintenanceOverdue(RuleEvaluator):
+    """A maintenance action still open after the end of its due day (factory time).
+    Due dates are calendar dates, so shifts and breaks never suppress it."""
+
+    rule_type = RuleType.MAINTENANCE_OVERDUE
+    parameters = MaintenanceOverdueParams
+    triggers = frozenset({MAINTENANCE})
+
+    def findings(self, rule: AlertRule, ctx: EvaluationContext) -> list[Finding]:
+        from apps.maintenance.models import OPEN_STATUSES, MaintenanceAction
+
+        today = ctx.now.astimezone(ZoneInfo(rule.factory.timezone)).date()
+        actions = MaintenanceAction.objects.filter(
+            factory_id=rule.factory_id,
+            status__in=OPEN_STATUSES,
+            due_date__lt=today,
+        ).select_related("machine", "line")
+        if rule.line_id:
+            actions = actions.filter(line_id=rule.line_id)
+        if rule.machine_id:
+            actions = actions.filter(machine_id=rule.machine_id)
+        zone = ZoneInfo(rule.factory.timezone)
+        findings = []
+        for action in actions:
+            deadline = datetime.combine(action.due_date + timedelta(days=1), time(0), tzinfo=zone)
+            findings.append(
+                Finding(
+                    Subject("maintenance_action", action.pk, f"maintenance_action:{action.pk}"),
+                    action.line_id,
+                    action.machine_id,
+                    deadline,
+                    "alert.maintenance_overdue",
+                    {
+                        "action_id": action.pk,
+                        "title": action.title,
+                        "machine": action.machine.name,
+                        "line": action.line.name,
+                        "due_date": action.due_date.isoformat(),
+                        "days": (today - action.due_date).days,
+                    },
+                )
+            )
+        return findings
+
+    def suppressed(self, rule: AlertRule, finding: Finding, ctx: EvaluationContext) -> bool:
+        return False
+
+
 EVALUATORS: dict[str, RuleEvaluator] = {
     evaluator.rule_type: evaluator
     for evaluator in (
@@ -439,6 +496,7 @@ EVALUATORS: dict[str, RuleEvaluator] = {
         LowOee(),
         HighDefectRate(),
         UnclassifiedStops(),
+        MaintenanceOverdue(),
     )
 }
 

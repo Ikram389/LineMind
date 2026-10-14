@@ -1,0 +1,15 @@
+name: labeler_after_fix
+description: >
+  The same line the week after the labeler was repaired: E-204 jams are now rare
+  (after every 6-10 hours of running, about 20 in the week). Backfill it right after
+  labeler_recurring_jams to see the drop on the maintenance action's effectiveness panel.
+line: ../config/bottling_line_1.yaml
+start: "2026-10-05T05:00:00Z"   # default backfill start; --start overrides it
+duration: 168h
+seed: 1011
+tick_seconds: 1
+count_interval_seconds: 45   # under the 60 s stale threshold, like a real connector
+defect_mode: exact
+random_faults:
+  - {machine: M05, alarm_code: E-204, every: [6h, 10h], duration: [60s, 120s]}
+defects: []
