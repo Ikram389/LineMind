@@ -34,6 +34,8 @@ from apps.production.models import (
     all_days,
 )
 from apps.production.services.orders import overlapping_orders
+from apps.quality.defaults import ensure_default_defect_types, ensure_demo_stations
+from apps.quality.services.processing import rebuild_quality
 
 DEMO_ORGANIZATION = "Demo Beverages"
 DEMO_FACTORY = ("Algiers Plant", "Africa/Algiers")
@@ -93,6 +95,7 @@ class Command(BaseCommand):
                 OTHER_ORGANIZATION, OTHER_FACTORY, OTHER_LINE, OTHER_MACHINES, OTHER_SPEED_PER_HOUR
             )
             self._create_planning(demo_org)
+            self._create_quality(demo_org)
 
             emails = [
                 self._create_member(f"{role.value}@{DEMO_EMAIL_DOMAIN}", password, demo_org, role)
@@ -110,6 +113,15 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Demo data is ready. Users (password from .env):"))
         for email in emails:
             self.stdout.write(f"  {email}")
+
+    def _create_quality(self, organization: Organization) -> None:
+        """Defect types Q01-Q06 and inspection stations where the simulator injects defects."""
+        factory = Factory.objects.get(organization=organization, name=DEMO_FACTORY[0])
+        line = ProductionLine.objects.get(factory=factory, name=DEMO_LINE)
+        ensure_default_defect_types(Organization.objects.get(name=OTHER_ORGANIZATION))
+        if ensure_demo_stations(line, ensure_default_defect_types(organization)):
+            # Defects received before the stations existed get their station now.
+            rebuild_quality(line)
 
     def _create_planning(self, organization: Organization) -> None:
         """Shifts, products and today's production order for Algiers Plant."""

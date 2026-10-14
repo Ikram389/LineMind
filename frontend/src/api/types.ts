@@ -1,4 +1,5 @@
 /** Types matching the LineMind backend API (/api/v1/). Dates are ISO 8601 strings in UTC. */
+import type { ShiftQuality } from "./qualityTypes.ts";
 
 export type MachineState =
   | "running"
@@ -227,4 +228,11 @@ export type IncidentClosed = Envelope<
   { incident_id: number; started_at: string; ended_at: string | null; duration_seconds: number | null }
 >;
 
-export type LiveMessage = MachineStateChanged | CountUpdated | IncidentChanged | IncidentClosed;
+export type QualityUpdated = Envelope<"quality_updated", ShiftQuality>;
+
+export type LiveMessage =
+  | MachineStateChanged
+  | CountUpdated
+  | IncidentChanged
+  | IncidentClosed
+  | QualityUpdated;

@@ -119,6 +119,28 @@ def test_units_are_conserved() -> None:
     assert feeder.count + initial_in_buffers == in_buffers + removed + shipped
 
 
+def test_reject_is_removed_at_its_machine_and_never_reaches_the_packer() -> None:
+    """A defective bottle leaves the line where it is found, so the packer only ever
+    receives (and counts) good bottles from upstream: counting both would be double."""
+    scenario = make_scenario(
+        duration=600,
+        defect_mode="exact",
+        machines={"M06": {"speed_per_hour": 5880}},
+        defects=[{"machine": "M05", "rates": {"Q02": 0.02}}],
+    )
+    sim = Simulation(scenario)
+    before = sim.line.buffer("M05-M06").level
+    sim.run_all()
+
+    labeler, packer = sim.line.machine("M05"), sim.line.machine("M06")
+    assert labeler.rejected == 20
+    assert packer.rejected == 0
+    after = sim.line.buffer("M05-M06").level
+    # Into the packer's conveyor went only the labeler's good bottles.
+    assert packer.count == labeler.good + before - after
+    assert packer.count == 980
+
+
 def test_speed_arithmetic_is_exact() -> None:
     sim = Simulation(make_scenario(duration=3600))
     sim.run_all()

@@ -24,7 +24,7 @@ from rest_framework import serializers
 
 from apps.downtime.services.derivation import rebuild_after_ingestion
 from apps.live.broadcast import StoredEvent, queue_after_ingestion
-from apps.production.event_types import EVENT_TYPE_TO_STATE, PRODUCTION_EVENT_TYPES
+from apps.production.event_types import EVENT_TYPE_TO_STATE, PRODUCTION_EVENT_TYPES, EventType
 from apps.production.models import (
     IngestedEvent,
     LineApiKey,
@@ -32,6 +32,8 @@ from apps.production.models import (
     ProductionEvent,
 )
 from apps.production.serializers import IncomingEventSerializer
+from apps.quality.services.live import queue_quality_updates
+from apps.quality.services.processing import process_after_ingestion
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,10 @@ def _after_store(stored: list[StoredEvent]) -> None:
     # Queued first so that, after commit, machine state messages go out before incident ones.
     queue_after_ingestion(stored)
     rebuild_after_ingestion([(event.machine_id, event.timestamp) for event in stored])
+    # After the downtime rebuild, so defect context sees up-to-date incidents.
+    defect_ids = [event.event_id for event in stored if event.kind == "defect"]
+    if defect_ids:
+        queue_quality_updates(process_after_ingestion(defect_ids))
 
 
 def _ingest_one(api_key: LineApiKey, data: object, received_at: datetime) -> IngestResult:
@@ -117,6 +123,8 @@ def _ingest_one(api_key: LineApiKey, data: object, received_at: datetime) -> Ing
         if event_type in EVENT_TYPE_TO_STATE
         else "count"
         if event_type in PRODUCTION_EVENT_TYPES
+        else "defect"
+        if event_type == EventType.QUALITY_DEFECT_DETECTED
         else "other"
     )
     return IngestResult(

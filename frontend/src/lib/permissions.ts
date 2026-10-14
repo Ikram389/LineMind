@@ -8,11 +8,15 @@ import { useAuth } from "../auth/context.ts";
 const CLASSIFY: Role[] = ["machine_operator", "production_supervisor", "factory_manager", "platform_admin"];
 const BULK_CLASSIFY: Role[] = ["production_supervisor", "factory_manager", "platform_admin"];
 const MANAGE_REASONS: Role[] = ["factory_manager", "platform_admin"];
+const REVIEW_QUALITY: Role[] = ["quality_inspector", "production_supervisor", "factory_manager", "platform_admin"];
 
 export interface Permissions {
   canClassify: boolean;
   canBulkClassify: boolean;
   canManageReasons: boolean;
+  canReviewQuality: boolean;
+  /** Defect types and inspection stations (the same managers as reasons). */
+  canManageQuality: boolean;
 }
 
 export function permissionsFor(role: Role | null | undefined): Permissions {
@@ -20,6 +24,8 @@ export function permissionsFor(role: Role | null | undefined): Permissions {
     canClassify: role ? CLASSIFY.includes(role) : false,
     canBulkClassify: role ? BULK_CLASSIFY.includes(role) : false,
     canManageReasons: role ? MANAGE_REASONS.includes(role) : false,
+    canReviewQuality: role ? REVIEW_QUALITY.includes(role) : false,
+    canManageQuality: role ? MANAGE_REASONS.includes(role) : false,
   };
 }
 

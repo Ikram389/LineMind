@@ -18,9 +18,10 @@ const tab = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-gray-900 text-white" : "bg-white text-gray-800 hover:bg-gray-200"
   }`;
 
-/** Overview · Downtime · Reasons (managers), plus the "stops needing a reason" badge. */
+/** Overview · Downtime · Quality · Reasons and Quality setup (managers), plus the
+ * "stops needing a reason" badge. */
 export function LineNav({ lineId, shift }: LineNavProps) {
-  const { canManageReasons } = usePermissions();
+  const { canManageReasons, canManageQuality } = usePermissions();
   const unclassified = useQuery({
     queryKey: [...queryKeys.unclassified(lineId), shift?.start],
     queryFn: () => countUnclassified(lineId, shift as CurrentShift),
@@ -37,9 +38,17 @@ export function LineNav({ lineId, shift }: LineNavProps) {
       <NavLink to={`/lines/${lineId}/downtime`} className={tab}>
         {t("nav.downtime")}
       </NavLink>
+      <NavLink to={`/lines/${lineId}/quality`} className={tab}>
+        {t("nav.quality")}
+      </NavLink>
       {canManageReasons && (
         <NavLink to={`/lines/${lineId}/reasons`} className={tab}>
           {t("nav.reasons")}
+        </NavLink>
+      )}
+      {canManageQuality && (
+        <NavLink to={`/lines/${lineId}/quality-setup`} className={tab}>
+          {t("nav.qualitySetup")}
         </NavLink>
       )}
       {count > 0 && (

@@ -45,6 +45,7 @@ class FactorySerializer(serializers.ModelSerializer):
             "stale_after_seconds",
             "escalation_after_seconds",
             "recurring_stop_threshold",
+            "quality_incident_window_minutes",
             "created_at",
             "updated_at",
         ]

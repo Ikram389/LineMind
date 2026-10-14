@@ -1,0 +1,21 @@
+name: reference_quality_1h
+description: >
+  Reference case for line-wide quality (docs/PRODUCT.md §4). 1 hour at 6,000 bottles/h,
+  no downtime, exactly 2% defects (Q02) rejected at the labeler (M05), nothing else.
+  The packer runs at 5,880/h, the rate of good bottles that reach it, so every conveyor
+  starts and ends the hour at the same level and bottles already on the conveyors do
+  not distort the hour (see "Conveyor effect" in PRODUCT.md §4).
+  Expected: labeler 6,000 processed / 120 rejected; packer 5,880; OEE total 6,000,
+  rejects 120, good 5,880, availability 100%, performance 100%, quality 98%, OEE 98%.
+line: ../config/bottling_line_1.yaml
+start: "2026-10-05T06:00:00Z"   # default backfill start; --start overrides it
+duration: 1h
+seed: 1
+tick_seconds: 1
+count_interval_seconds: 10
+defect_mode: exact
+machines:
+  M06: {speed_per_hour: 5880}
+faults: []
+defects:
+  - {machine: M05, rates: {Q02: 0.02}}

@@ -10,7 +10,14 @@ import pytest
 from scenarios import ScenarioError, load_scenario, parse_duration, parse_scenario
 from tests.helpers import CONFIG_DIR, SCENARIOS_DIR, make_scenario
 
-BUNDLED = ["normal_shift", "labeler_jam", "reference_1h", "sensor_dropout"]
+BUNDLED = [
+    "normal_shift",
+    "labeler_jam",
+    "reference_1h",
+    "reference_quality_1h",
+    "secondary_breakdown",
+    "sensor_dropout",
+]
 
 
 @pytest.mark.parametrize("name", BUNDLED)
@@ -30,6 +37,30 @@ def test_reference_scenario_values() -> None:
     assert {m.speed_per_hour for m in scenario.line.machines} == {6000}
     assert [(f.machine, f.duration) for f in scenario.faults] == [("M06", 300)]
     assert sum(scenario.defect_rates["M06"].values()) == Fraction(3, 100)
+
+
+def test_reference_quality_scenario_values() -> None:
+    scenario = load_scenario(SCENARIOS_DIR / "reference_quality_1h.yaml")
+
+    assert scenario.duration == 3600
+    assert scenario.faults == ()
+    assert scenario.defect_rates == {"M05": {"Q02": Fraction(2, 100)}}
+    speeds = {m.external_id: m.speed_per_hour for m in scenario.line.machines}
+    assert speeds == {"M01": 6000, "M02": 6000, "M03": 6000, "M04": 6000, "M05": 6000, "M06": 5880}
+
+
+def test_machine_speed_override_changes_only_that_machine() -> None:
+    scenario = make_scenario(machines={"M03": {"speed_per_hour": 4000}})
+
+    assert [m.speed_per_hour for m in scenario.line.machines] == [
+        6000,
+        6000,
+        4000,
+        6000,
+        6000,
+        6000,
+    ]
+    assert [m.name for m in scenario.line.machines][2] == "Filler"
 
 
 def test_normal_shift_is_eight_hours_with_about_one_percent_defects() -> None:
@@ -80,6 +111,9 @@ def test_buffer_overrides_apply() -> None:
         ({"start": "2026-10-12T10:00:00"}, "timezone"),
         ({"defect_mode": "sometimes"}, "defect_mode"),
         ({"buffers": {"M01-M03": {"capacity": 5}}}, "unknown buffer"),
+        ({"machines": {"M09": {"speed_per_hour": 100}}}, "unknown key(s): M09"),
+        ({"machines": {"M06": {"name": "x"}}}, "unknown key(s): name"),
+        ({"machines": {"M06": {"speed_per_hour": 0}}}, "greater than zero"),
         ({"buffers": {"M01-M02": {"initial_level": 60}}}, "initial_level"),
         (
             {"sensor_dropouts": [{"machine": "M03", "at": 1, "duration": 1, "announce": "yes"}]},

@@ -109,6 +109,19 @@ The simulator's `reference_1h` scenario (§14), sent through the event API and d
 
 Expected: availability 91.67%, performance 100.00%, quality 97.00%, **OEE 88.92%**, no warnings, data coverage 100%.
 
+### Reference test case (line-wide quality, end to end)
+The simulator's `reference_quality_1h` scenario, with the same range, shift and 0.6 s product as above: 1 hour at 6,000 bottles/h, no downtime, exactly 2% defects (Q02) rejected **at the labeler** (upstream of the packer), no other defects. The packer runs at 5,880/h, the rate of good bottles that reach it, so every conveyor starts and ends the hour with the same number of bottles (see "Conveyor effect" below).
+
+| Input | Value |
+| --- | --- |
+| Labeler: processed / rejected | 6,000 / 120 |
+| Packer (counting machine) output | 5,880 (it rejects nothing) |
+| Total count = 5,880 + 120 upstream rejects | 6,000 |
+| Rejects | 120 |
+| Good count = 5,880 − 0 | 5,880 |
+
+Expected: availability 100.00%, performance 100.00%, quality 98.00%, **OEE 98.00%**, no warnings. Under the old rule (packer counter only) the same hour gave performance 98.00% and quality 100.00%: the 120 rejected bottles looked like slow running.
+
 ### OEE settings (per factory, `Factory.oee_settings`)
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -125,13 +138,20 @@ All times are intersected and merged so that no second is ever counted twice. Fo
 2. **Planned production time** = shift time minus breaks, planned stops, changeovers and no-data time, *as the settings above decide*.
 3. **Unplanned downtime** = the counting machine's breakdown, blocked and starved time (plus changeovers, no-data time and planned stops when the settings count them as downtime), only inside planned production time.
 4. **Run time** = planned production time − unplanned downtime.
-5. **Counts** come from the line's counting machine (default: the last machine). Counters are cumulative: production is the difference between two consecutive readings, credited to the later reading's time, and only counted if that time is inside planned production time. A machine's first reading is only a starting point. A counter that goes down is a reset (the new value counts from zero, with a warning). Rejects come from the same machine's rejected counter.
+5. **Counts** are line-wide. Counters are cumulative: production is the difference between two consecutive readings, credited to the later reading's time, and only counted if that time is inside planned production time. A machine's first reading is only a starting point. A counter that goes down is a reset (the new value counts from zero, with a warning). A rejected bottle leaves the line at the machine that rejected it (it never travels on), so:
+   - **Total count** = counting machine output (default: the last machine) **+ rejects of the machines upstream of it** (lower position on the line; these bottles never reached the counting machine);
+   - **Good count** = counting machine output − rejects at the counting machine;
+   - **Rejects** = total − good = upstream rejects + counting machine rejects.
+
+   Every count follows the same counter rules, including the planned-time rule. Upstream rejects also count at their ideal cycle time (step 6), so they are a **quality** loss, not a performance loss. The API shows them separately (`upstream_rejected_count`, `upstream_rejected_by_machine`). An upstream reading without a rejected count gives a warning. Machines after the counting machine are ignored.
 6. **Ideal cycle time** = that of the product of the production order covering each reading (a line-specific value overrides the product's). Ideal production time = Σ ideal cycle time × count, which equals ideal cycle time × total count for one product. Without an order, the line's nominal speed (slowest machine) is used and a warning is returned.
 7. Availability, Performance, Quality and OEE follow the definitions above. Performance above 100% is never capped; it returns a warning (the ideal cycle time is probably wrong). With no planned production time all results are null with a reason; a line that never ran has OEE 0.
 8. **Data coverage** = share of planned time that has data from the counting machine (warning below 90%).
 9. Results per hour, day or shift add up exactly: the total of a grouped request is calculated from the summed inputs, never by averaging percentages.
 
-**Known limitation.** Quality currently only counts rejects reported by the line's counting machine. Bottles rejected upstream (e.g. at the labeler) never reach the counting machine, so they appear as a performance loss instead of a quality loss. Build step 9 must revisit this so that line-wide rejects count toward quality.
+**Reviews do not change OEE.** OEE counts what the machines physically did, from their counters: a bottle pushed off the line is lost production whether or not its defect was real. A quality inspector's review (§6) can say "false reject"; that changes the defect statistics, but the bottle was still removed, so OEE stays the same. This is why, after reviews, the defects on the quality page can be fewer than the rejects in OEE.
+
+**Conveyor effect (short ranges).** OEE counts what happened *at the machines during the range*. Bottles that were already on the conveyors when the range started, or that are still on them when it ends, are not matched up. Over a short range this can make the inputs slightly inaccurate, and performance can even exceed 100%. Example: `reference_quality_1h` with the packer at the full 6,000/h. Every conveyor starts with 25 bottles; the packer is faster than the 5,880 good bottles/h that reach it, so it drains 23 of the 25 bottles waiting on its conveyor. Those 23 passed the labeler *before* the hour started, so the packer counts 5,903 while only the hour's 120 labeler rejects are added: total 6,023, good 5,903, performance 100.38% (with the "above 100%" warning), quality 98.01%, OEE 98.38%. The difference is at most what the conveyors can hold (here 50 bottles each), so over a full shift (tens of thousands of bottles) it is much smaller, and over consecutive shifts it evens out. The reference scenario sizes the packer to the good flow so that the conveyors stay level.
 
 ---
 
@@ -191,6 +211,13 @@ Start with one line, one inspection station, one defect type.
 | Q04 | Missing or tilted cap |
 | Q05 | Unreadable or incorrect batch/date code (OCR) |
 | Q06 | Damaged bottle |
+
+### Recording defects (build step 9)
+- **Only defects are stored, one row each** (`InspectionResult`, from each `quality_defect_detected` event, keyed by its `event_id`). Good bottles are never stored one by one: the **inspected volume comes from the station machine's counters** (what it processed in the range), using the same counter rules as the OEE (§4).
+- A result keeps what was detected exactly as sent (defect code, confidence, station, time) plus the production context computed when it is read: product and order, the station machine's state and last alarm, and the last line stop that *ended* within `Factory.quality_incident_window_minutes` (default 10) before it, worded as "Occurred 2 min after incident #14 ended", never as a cause.
+- Processing is idempotent and can be rebuilt from the raw events (`rebuild_quality`); raw events are never changed. Unknown defect codes and machines without an active inspection station are kept, with an empty type/station and a warning.
+- **Reviews** (`QualityReview`) are separate and never edited: confirmed, false reject, or reclassified (with the corrected type). The newest is current. Metrics use it: a false reject is no longer a defect (shown as a separate count), a reclassified result counts under its corrected type. Reviews never change OEE (§4).
+- **Defect rate** = defects ÷ inspected units. For a station: its machine's counter. For the line: the line total count (counting machine output + upstream rejects, §4), so each bottle counts once even though it passes several stations. Rates of a group are computed from summed counts, never by averaging rates.
 
 ### Rules
 - No automatic rejection until validated: labelled dataset, separate test set, precision/recall/false-reject/missed-defect measured **per defect type**, varied conditions tested, reject timing verified, safe fallback defined.

@@ -29,6 +29,7 @@ SCENARIO_KEYS = frozenset(
         "tick_seconds",
         "count_interval_seconds",
         "defect_mode",
+        "machines",
         "buffers",
         "faults",
         "planned_stops",
@@ -163,6 +164,7 @@ def parse_scenario(data: dict[str, Any], base_dir: Path, source: str = "scenario
     if not line_path.is_absolute():
         line_path = base_dir / line_path
     line = load_line_config(line_path)
+    line = _apply_machine_overrides(line, data.get("machines") or {}, source)
     line = _apply_buffer_overrides(line, data.get("buffers") or {}, source)
 
     tick = _positive_int(data.get("tick_seconds", 1), "tick_seconds", source)
@@ -343,6 +345,22 @@ def _parse_defects(items: list[dict[str, Any]], ctx: _Context) -> dict[str, dict
             raise ScenarioError(f"{ctx.source}: defect rates for {machine} add up to more than 1.")
         result.setdefault(machine, {}).update(rates)
     return result
+
+
+def _apply_machine_overrides(
+    line: LineConfig, overrides: dict[str, Any], source: str
+) -> LineConfig:
+    """Per-scenario machine changes; only the speed can be overridden."""
+    _check_keys(overrides, frozenset(line.machine_ids), source)
+    machines = []
+    for machine in line.machines:
+        values = overrides.get(machine.external_id)
+        if values is not None:
+            _check_keys(values, frozenset({"speed_per_hour"}), source)
+            speed = _positive_int(values.get("speed_per_hour"), "speed_per_hour", source)
+            machine = MachineConfig(machine.external_id, machine.name, machine.machine_type, speed)
+        machines.append(machine)
+    return LineConfig(line.name, tuple(machines), line.buffers)
 
 
 def _apply_buffer_overrides(line: LineConfig, overrides: dict[str, Any], source: str) -> LineConfig:

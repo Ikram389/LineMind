@@ -245,6 +245,93 @@ def test_missing_rejects_warn() -> None:
     assert "rejects_not_reported" in codes(run(data, 0, 60))
 
 
+# --- Line-wide quality (rejects upstream of the counting machine) --------------------
+
+
+def test_upstream_rejects_count_toward_total_and_rejects() -> None:
+    """The plan's worked example: 1 h at 6,000/h, labeler rejects 120, packer rejects 30."""
+    data = make_data(
+        shifts=[(0, 60)],
+        readings=[(0, 0, 0), (60, 5_880, 30)],
+        upstream={"M05": [(0, 0, 0), (30, 3_000, 60), (60, 6_000, 120)], "M03": [(0, 0, 0)]},
+        orders=whole_order(Fraction(3, 5)),
+    )
+
+    result = run(data, 0, 60)
+    i = result.inputs
+
+    assert (i.output_count, i.output_rejected_count, i.upstream_rejected_count) == (5_880, 30, 120)
+    assert (i.total_count, i.rejected_count, i.good_count) == (6_000, 150, 5_850)
+    assert i.upstream_rejected_by_machine == {"M05": 120}
+    assert result.performance.value == 1
+    assert result.quality.value == Fraction(5_850, 6_000)
+    assert percent(result.oee.value) == 97.50
+
+
+def test_upstream_rejects_move_from_performance_to_quality_loss() -> None:
+    common = {
+        "shifts": [(0, 60)],
+        "readings": [(0, 0, 0), (60, 5_880, 0)],
+        "orders": whole_order(Fraction(3, 5)),
+    }
+    before = run(make_data(**common), 0, 60)
+    after = run(make_data(**common, upstream={"M05": [(0, 0, 0), (60, 6_000, 120)]}), 0, 60)
+
+    assert percent(before.performance.value) == 98.00
+    assert percent(before.quality.value) == 100.00
+    assert percent(after.performance.value) == 100.00
+    assert percent(after.quality.value) == 98.00
+    assert after.oee.value == before.oee.value  # the good count did not change
+    assert after.inputs.good_count == before.inputs.good_count == 5_880
+
+
+def test_upstream_rejects_follow_the_counter_and_planned_time_rules() -> None:
+    data = make_data(
+        shifts=[(0, 60)],
+        breaks=[(20, 30)],
+        readings=[(0, 0, 0), (60, 5_000, 0)],
+        # +10 before the window baseline, +7 during the break (not counted), a reset to 4.
+        upstream={
+            "M02": [(-5, 0, 0), (0, 5_000, 10), (25, 5_500, 17), (40, 6_000, 20), (50, 100, 4)]
+        },
+        orders=whole_order(),
+    )
+
+    i = run(data, 0, 60).inputs
+
+    assert i.upstream_rejected_count == 3 + 4
+    assert i.total_count == 5_000 + 7
+
+
+def test_upstream_readings_without_rejects_warn() -> None:
+    data = make_data(
+        shifts=[(0, 60)],
+        readings=[(0, 0, 0), (60, 5_000, 0)],
+        upstream={"M05": [(0, 0, 0), (60, 5_000, None)]},
+        orders=whole_order(),
+    )
+
+    result = run(data, 0, 60)
+
+    assert "upstream_rejects_not_reported" in codes(result)
+    assert result.inputs.upstream_rejected_count == 0
+
+
+def test_summed_buckets_keep_upstream_rejects_per_machine() -> None:
+    data = make_data(
+        shifts=[(0, 120)],
+        readings=[(0, 0, 0), (60, 100, 0), (120, 200, 0)],
+        upstream={"M05": [(0, 0, 0), (60, 100, 2), (120, 200, 5)], "M03": [(0, 0, 0), (90, 1, 1)]},
+        orders=whole_order(),
+    )
+    hours = [compute_inputs(data, at(s), at(s + 60)) for s in (0, 60)]
+
+    total = sum_inputs(hours)
+
+    assert total.upstream_rejected_by_machine == {"M05": 5, "M03": 1}
+    assert total.total_count == compute_inputs(data, at(0), at(120)).total_count == 206
+
+
 # --- Edge cases ------------------------------------------------------------------------
 
 

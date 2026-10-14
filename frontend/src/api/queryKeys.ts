@@ -15,4 +15,10 @@ export const queryKeys = {
   reasons: (factoryId: number, includeArchived = false) =>
     ["reasons", factoryId, includeArchived] as const,
   incident: (id: number) => ["incident", id] as const,
+  /** Everything derived from inspection results and their reviews (refreshed after a review). */
+  quality: ["quality"] as const,
+  qualityAnalysis: (kind: string, params: unknown) => ["quality", kind, params] as const,
+  shiftQuality: (lineId: number) => ["quality", "shift", lineId] as const,
+  defectTypes: (includeArchived = false) => ["defectTypes", includeArchived] as const,
+  stations: (lineId: number, includeArchived = false) => ["stations", lineId, includeArchived] as const,
 };

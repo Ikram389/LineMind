@@ -110,6 +110,14 @@ export function applyLiveMessage(
       void queryClient.invalidateQueries({ queryKey: queryKeys.oee(lineId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.downtime });
       return;
+    case "quality_updated":
+      // The overview card shows these numbers directly; other quality views refetch.
+      queryClient.setQueryData(queryKeys.shiftQuality(lineId), message.data);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.quality,
+        predicate: (query) => query.queryKey[1] !== "shift",
+      });
+      return;
     default:
       // Unknown message: fall back to the full state from the REST API.
       void queryClient.invalidateQueries({ queryKey: key });

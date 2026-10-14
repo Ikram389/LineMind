@@ -22,6 +22,10 @@ Counting rules:
   planned production time (end-inclusive, see TimeSet.contains_end_inclusive).
 - A counter that goes down was reset: the new value counts from zero (warning).
   The counter rule itself is shared: apps/production/services/counters.py.
+- Line-wide quality (LineCounts in counters.py): rejects of machines upstream of
+  the counting machine never reach it, so they are added to the total count and
+  to the rejects, with the same counter and planned-time rules. Their ideal time
+  counts too, so upstream rejects are a quality loss, not a performance loss.
 """
 
 from __future__ import annotations
@@ -34,7 +38,7 @@ from fractions import Fraction
 from typing import Any
 
 from apps.organizations.oee_settings import NO_DATA_EXCLUDED
-from apps.production.services.counters import Reading, counter_deltas
+from apps.production.services.counters import LineCounts, Reading, counter_deltas
 from apps.production.services.timeset import TimeSet
 
 FAULT_CATEGORIES = frozenset({"breakdown", "blocked", "starved"})
@@ -78,6 +82,8 @@ class LineData:
     stale_after_seconds: int
     settings: dict[str, Any]
     now: datetime
+    # Counter readings of each machine upstream of the counting machine, by external id.
+    upstream_readings: tuple[tuple[str, tuple[Reading, ...]], ...] = ()
 
 
 # --- Inputs (additive, so buckets can be summed) ---------------------------------------
@@ -94,8 +100,10 @@ class OEEInputs:
     planned_production_seconds: Fraction = ZERO
     unplanned_downtime_seconds: Fraction = ZERO
     run_seconds: Fraction = ZERO
-    total_count: int = 0
-    rejected_count: int = 0
+    output_count: int = 0
+    output_rejected_count: int = 0
+    upstream_rejected_count: int = 0
+    upstream_rejected_by_machine: dict[str, int] = field(default_factory=dict)
     ideal_production_seconds: Fraction = ZERO
     coverage_base_seconds: Fraction = ZERO
     covered_seconds: Fraction = ZERO
@@ -103,6 +111,7 @@ class OEEInputs:
     unassigned_count: int = 0
     counter_resets: int = 0
     readings_without_rejects: int = 0
+    upstream_readings_without_rejects: int = 0
     readings_counted: int = 0
     computed_until: datetime | None = None
     range_in_future: bool = False
@@ -110,8 +119,22 @@ class OEEInputs:
     downtime_by_category_seconds: dict[str, Fraction] = field(default_factory=dict)
 
     @property
+    def counts(self) -> LineCounts:
+        return LineCounts(
+            self.output_count, self.output_rejected_count, self.upstream_rejected_count
+        )
+
+    @property
+    def total_count(self) -> int:
+        return self.counts.total
+
+    @property
+    def rejected_count(self) -> int:
+        return self.counts.rejected
+
+    @property
     def good_count(self) -> int:
-        return self.total_count - self.rejected_count
+        return self.counts.good
 
     def __add__(self, other: OEEInputs) -> OEEInputs:
         result = OEEInputs()
@@ -127,6 +150,8 @@ class OEEInputs:
                 setattr(result, f.name, merged)
             elif f.name == "downtime_by_category_seconds":
                 setattr(result, f.name, {k: a.get(k, ZERO) + b.get(k, ZERO) for k in {*a, *b}})
+            elif f.name == "upstream_rejected_by_machine":
+                setattr(result, f.name, {k: a.get(k, 0) + b.get(k, 0) for k in {*a, *b}})
             elif f.name == "computed_until":
                 setattr(result, f.name, max((x for x in (a, b) if x is not None), default=None))
             elif f.name == "range_in_future":
@@ -226,29 +251,50 @@ def _count(
     data: LineData, start: datetime, end: datetime, planned: TimeSet, inputs: OEEInputs
 ) -> None:
     """Counter differences (the shared rule in production/services/counters.py) in planned time."""
+
+    def counted(moment: datetime) -> bool:
+        return start < moment <= end and planned.contains_end_inclusive(moment)
+
     for delta in counter_deltas(data.readings):
         moment = delta.reading.timestamp
-        if not (start < moment <= end and planned.contains_end_inclusive(moment)):
+        if not counted(moment):
             continue
         inputs.counter_resets += int(delta.was_reset)
         inputs.readings_without_rejects += int(delta.rejects_missing)
-        inputs.total_count += delta.produced
-        inputs.rejected_count += delta.rejected
+        inputs.output_count += delta.produced
+        inputs.output_rejected_count += delta.rejected
         inputs.readings_counted += 1
+        _credit_ideal_time(data, moment, delta.produced, inputs)
 
-        order = next((o for o in data.orders if o.covers(moment)), None)
-        if order is not None:
-            cycle_time = order.ideal_cycle_time
-            key, name = order.sku, order.name
-        else:
-            cycle_time = data.fallback_cycle_time or ZERO
-            key, name = "", "No product assigned (line nominal speed)"
-            inputs.unassigned_count += delta.produced
-        inputs.ideal_production_seconds += cycle_time * delta.produced
-        product = inputs.products.setdefault(
-            key, {"sku": key or None, "name": name, "ideal_cycle_time": cycle_time, "count": 0}
-        )
-        product["count"] += delta.produced
+    for machine_id, readings in data.upstream_readings:
+        for delta in counter_deltas(readings):
+            moment = delta.reading.timestamp
+            if not counted(moment):
+                continue
+            inputs.upstream_readings_without_rejects += int(delta.rejects_missing)
+            if delta.rejected == 0:
+                continue
+            inputs.upstream_rejected_count += delta.rejected
+            by_machine = inputs.upstream_rejected_by_machine
+            by_machine[machine_id] = by_machine.get(machine_id, 0) + delta.rejected
+            _credit_ideal_time(data, moment, delta.rejected, inputs)
+
+
+def _credit_ideal_time(data: LineData, moment: datetime, units: int, inputs: OEEInputs) -> None:
+    """Units count toward the total at the ideal cycle time of the order running then."""
+    order = next((o for o in data.orders if o.covers(moment)), None)
+    if order is not None:
+        cycle_time = order.ideal_cycle_time
+        key, name = order.sku, order.name
+    else:
+        cycle_time = data.fallback_cycle_time or ZERO
+        key, name = "", "No product assigned (line nominal speed)"
+        inputs.unassigned_count += units
+    inputs.ideal_production_seconds += cycle_time * units
+    product = inputs.products.setdefault(
+        key, {"sku": key or None, "name": name, "ideal_cycle_time": cycle_time, "count": 0}
+    )
+    product["count"] += units
 
 
 # --- Results -----------------------------------------------------------------------------
@@ -350,6 +396,15 @@ def _warnings(inputs: OEEInputs) -> list[dict[str, str]]:
                 "rejected count; their rejects were counted as zero.",
             }
         )
+    if inputs.upstream_readings_without_rejects:
+        warnings.append(
+            {
+                "code": "upstream_rejects_not_reported",
+                "message": f"{inputs.upstream_readings_without_rejects} counter reading(s) from "
+                "machines before the counting machine had no rejected count; those rejects "
+                "were counted as zero.",
+            }
+        )
     if inputs.unassigned_planned_seconds:
         warnings.append(
             {
@@ -410,6 +465,10 @@ def result_to_dict(result: OEEResult) -> dict[str, Any]:
             "total_count": i.total_count,
             "rejected_count": i.rejected_count,
             "good_count": i.good_count,
+            "counting_machine_output": i.output_count,
+            "counting_machine_rejected_count": i.output_rejected_count,
+            "upstream_rejected_count": i.upstream_rejected_count,
+            "upstream_rejected_by_machine": dict(sorted(i.upstream_rejected_by_machine.items())),
             "ideal_production_seconds": secs(i.ideal_production_seconds),
             "products": [
                 {

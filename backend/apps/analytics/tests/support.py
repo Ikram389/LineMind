@@ -26,6 +26,7 @@ def make_data(
     last_seen: float | None = None,
     settings: dict[str, Any] | None = None,
     now: datetime | None = None,
+    upstream: dict[str, list[tuple[float, int, int | None]]] | None = None,
 ) -> LineData:
     """All times in minutes after T0 (2026-10-05 06:00 UTC)."""
     shifts = shifts if shifts is not None else [(0, 480)]
@@ -50,6 +51,10 @@ def make_data(
         stale_after_seconds=60,
         settings=with_defaults(settings or {}),
         now=now or at(100_000),
+        upstream_readings=tuple(
+            (machine, tuple(Reading(at(m), count, rejected) for m, count, rejected in rows))
+            for machine, rows in (upstream or {}).items()
+        ),
     )
 
 

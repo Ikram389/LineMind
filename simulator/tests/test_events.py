@@ -66,6 +66,37 @@ def test_reference_without_fault_would_make_6000() -> None:
     assert sim.stats["M06"].produced == 6000  # planned 6,000; the stop lost 500
 
 
+def test_reference_quality_1h_gives_known_answer() -> None:
+    sim, events = run("reference_quality_1h")
+
+    labeler, packer = sim.stats["M05"], sim.stats["M06"]
+    assert (labeler.produced, labeler.rejected) == (6000, 120)
+    assert (packer.produced, packer.rejected) == (5880, 0)
+    assert all(sim.stats[m].rejected == 0 for m in ("M01", "M02", "M03", "M04"))
+    # Every conveyor ends where it started: no bottles piled up or drained.
+    assert {b.level for b in sim.line.buffers} == {25}
+    assert all(set(s.seconds_in_state) == {"running"} for s in sim.stats.values())
+
+    defects = [e for e in events if e.event_type == "quality_defect_detected"]
+    assert len(defects) == 120
+    assert {(e.machine_external_id, e.payload["defect_code"]) for e in defects} == {("M05", "Q02")}
+
+
+def test_defect_events_carry_a_reproducible_confidence() -> None:
+    _, first = run("reference_1h")
+    _, second = run("reference_1h")
+
+    def confidences(events: list[Event]) -> list[float]:
+        return [
+            e.payload["confidence"] for e in events if e.event_type == "quality_defect_detected"
+        ]
+
+    values = confidences(first)
+    assert values == confidences(second)
+    assert all(0.80 <= v <= 0.99 for v in values)
+    assert len(set(values)) > 5  # varied, not a constant
+
+
 # --- Determinism -----------------------------------------------------------------------
 
 

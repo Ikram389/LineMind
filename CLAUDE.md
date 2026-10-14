@@ -49,6 +49,9 @@ Django apps live in `backend/apps/<name>/` (accounts, organizations, production,
 - Frontend tests (Vitest): `docker compose exec frontend npm test` (one file: `docker compose exec frontend npx vitest run src/pages/DowntimePage.test.tsx`)
 - Downtime screens: http://localhost:5173/lines/<id>/downtime (Pareto, table, CSV), `/lines/<id>/unclassified` (queue), `/lines/<id>/reasons` (factory managers)
 - CSV export from the shell: `GET /api/v1/downtime-events/export.csv?line=<id>&start=ISO&end=ISO[&view=line]` (JWT)
+- Quality screens: http://localhost:5173/lines/<id>/quality (summary, Pareto, trend, results, reviews), `/lines/<id>/quality-setup` (defect types and stations, factory managers)
+- Rebuild inspection results from the raw defect events (idempotent; reviews stay attached; run after the first `migrate` of step 9, or if processing failed): `docker compose exec backend python manage.py rebuild_quality --line <id> [--start ISO] [--end ISO]`
+- Quality endpoints (JWT; range required): `GET /api/v1/quality/summary|pareto|trend/?line=<id>&start=ISO&end=ISO`, `GET /api/v1/inspection-results/[export.csv]`, `POST /api/v1/inspection-results/<id>/reviews/`
 - After changing `frontend/package.json`: `docker compose up -d --build -V frontend` (`-V` renews the container's node_modules volume)
 - Dashboard: http://localhost:5173 (log in e.g. as `production_supervisor@demo-beverages.test`); live data: `docker compose run --rm simulator python main.py --scenario scenarios/labeler_jam.yaml --mode realtime`
 - Simulator tests/lint (no backend needed): `docker compose run --rm simulator pytest` / `docker compose run --rm simulator ruff check .`
@@ -177,6 +180,23 @@ Definitions, settings and their defaults are in `docs/PRODUCT.md` §4. Code:
 - **CSV export.** Factory-time timestamps with offsets, a UTF-8 BOM for Excel, cells starting with `= + - @` (or tab/CR) are prefixed with `'`, and more than `DOWNTIME_EXPORT_MAX_ROWS` (50,000) rows → 400.
 - **Frontend.** The filters live in the URL (`lib/downtimeFilters.ts`). Pages: `pages/DowntimePage.tsx`, `UnclassifiedPage.tsx`, `ReasonsPage.tsx`. Classification goes through `lib/useClassify.ts`. The prompt after a line stop comes from `live/useClassificationPrompts.ts`. Role checks for buttons are in `lib/permissions.ts`; the server enforces them anyway.
 
+## Quality
+Code lives in `backend/apps/quality/` (step 9). Rules are in `docs/PRODUCT.md` §4 (counting) and §6 (recording).
+- **Results are derived.** `services/processing.py` turns each `quality_defect_detected` event into one `InspectionResult` (keyed by `event_id`), called by the ingestion service after the downtime rebuild, by `rebuild_quality`, and after station or defect-type changes. It updates rows in place, so reviews stay attached. It only reads raw events.
+- **Never store good bottles.** Inspected volume comes from machine counters (`production/services/counters.py`).
+- **Nothing is dropped.** Unknown codes and machines without an active station are kept, with warnings. An archived station stays on its past results; new defects use the machine's active station (at most one per machine).
+- **Line-wide counts have one rule.** `LineCounts` in `production/services/counters.py`: total = counting machine output + upstream rejects; good = output − rejects at the counting machine. The OEE (`analytics/services/oee.py`) and the quality metrics both use it; never re-derive it elsewhere. A rejected bottle leaves the line at its machine in the simulator (`factory.py`), which is what makes this rule count each bottle once.
+- **Metrics are in one place.** `services/metrics.py` covers summary, Pareto, trend and the effective defect type. A `false_reject` review removes a result from defect counts; `reclassified` counts it under the corrected type. Rates are computed from summed counts.
+- **Reviews.**
+  - `QualityReview` is append-only; the newest is `current_review`.
+  - Write reviews only through `services/reviews.py: review_result()`, which also audits.
+  - Allowed roles: quality inspector, supervisor, factory manager, platform admin.
+  - **Reviews never change OEE**, which counts what the machines removed.
+- **Context is computed when read.** `services/context.py` batches it for a page or CSV chunk: product and order, machine state and last alarm, and the last incident that ended within `Factory.quality_incident_window_minutes`. Wording: "Occurred 2 min after incident #14 ended", never a cause.
+- **Live updates.** `quality_updated` (`services/live.py`) is sent after commit, at most once per line every 5 s, after new defects or a review. The overview card also refreshes every minute because throttled messages can be dropped.
+- **Configuration.** Defect types are organization-wide (like products: writes need all factories). Stations are per line. Both archive instead of delete when used (409). A used defect type's code can't change.
+- **Tests.** The fixtures `reference_quality_1h` (OEE 98.00%) and `normal_shift_150m` carry defect confidences. Use the `catalogue` and `defect` fixtures in `apps/quality/tests/conftest.py`.
+
 ## Non-negotiable rules
 1. **Tenant isolation.** Every query that returns organization data is filtered by the requesting user's organization and permitted factories, enforced on the server (querysets/permissions), never only in the UI. Every new endpoint gets a test proving a user from another organization gets 404/403.
 2. **Observations are immutable.** Raw machine events (`MachineStateEvent`, `ProductionEvent`) are never edited or deleted by application logic. Classifications, AI suggestions and confirmed diagnoses are stored separately, with who/what created them.
@@ -229,4 +249,6 @@ Plain Python in `simulator/` (no Django, no MQTT). It runs as the `simulator` Co
 - **Known answers** (keep these tests passing):
   - `reference_1h.yaml`: M06 makes 5,500 / 165 rejected / 5,335 good.
   - `labeler_jam.yaml`: the timeline matches PRODUCT.md §5.
-- **New scenarios** go in `simulator/scenarios/`. Unknown keys are rejected. Machine IDs must exist in the line config, and all times must be multiples of `tick_seconds`.
+  - `reference_quality_1h.yaml`: labeler 6,000 / 120 rejected, packer 5,880, every conveyor back at 25 (PRODUCT.md §4).
+- **Rejects leave the line** at the machine that rejected them (never counted downstream). Defect events carry `payload.confidence` (0.80–0.99), derived from the event id so runs stay reproducible.
+- **New scenarios** go in `simulator/scenarios/`. A scenario may override machine speeds (`machines: {M06: {speed_per_hour: 5880}}`) and buffers. Unknown keys are rejected. Machine IDs must exist in the line config, and all times must be multiples of `tick_seconds`.

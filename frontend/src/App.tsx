@@ -8,6 +8,8 @@ import { LineOverviewPage } from "./pages/LineOverviewPage.tsx";
 import { LinePickerPage } from "./pages/LinePickerPage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
 import { MachineDetailPage } from "./pages/MachineDetailPage.tsx";
+import { QualityPage } from "./pages/QualityPage.tsx";
+import { QualitySetupPage } from "./pages/QualitySetupPage.tsx";
 import { ReasonsPage } from "./pages/ReasonsPage.tsx";
 import { UnclassifiedPage } from "./pages/UnclassifiedPage.tsx";
 
@@ -61,6 +63,22 @@ export default function App() {
               element={
                 <RequireAuth>
                   <ReasonsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/lines/:lineId/quality"
+              element={
+                <RequireAuth>
+                  <QualityPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/lines/:lineId/quality-setup"
+              element={
+                <RequireAuth>
+                  <QualitySetupPage />
                 </RequireAuth>
               }
             />

@@ -22,6 +22,9 @@ from apps.organizations.tenancy import get_membership
 def snapshot(instance: Model) -> dict[str, Any]:
     """The instance's fields as plain JSON values (dates, decimals and times as strings)."""
     data = model_to_dict(instance)
+    for name, value in data.items():
+        if isinstance(value, list):  # many-to-many fields: store the related ids
+            data[name] = sorted(item.pk if isinstance(item, Model) else item for item in value)
     data["id"] = instance.pk
     return json.loads(json.dumps(data, cls=DjangoJSONEncoder))
 

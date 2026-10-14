@@ -8,10 +8,16 @@ where the events go.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
-from events import PLANNED_STOP_ENDED, STATE_EVENT_TYPES, Event, EventFactory
+from events import (
+    PLANNED_STOP_ENDED,
+    STATE_EVENT_TYPES,
+    Event,
+    EventFactory,
+    defect_confidence,
+)
 from factory import Condition, DefectModel, ExactDefects, Line, MachineTick, RandomDefects
 from machines import MachineState
 from scenarios import Scenario
@@ -81,12 +87,7 @@ class Simulation:
             if self.scenario.is_silent(machine_id, offset):
                 continue
             events.extend(self._state_events(result, at))
-            events.extend(
-                self.events.create(
-                    machine_id, "quality_defect_detected", at, payload={"defect_code": code}
-                )
-                for code in result.defects
-            )
+            events.extend(self._defect_event(machine_id, code, at) for code in result.defects)
 
         if first_tick:
             # Baseline counter reading at the start, as a real connector sends when it
@@ -110,6 +111,11 @@ class Simulation:
             elif self.scenario.planned_stop_for(machine_id, offset) is not None:
                 conditions[machine_id] = Condition("planned_stop")
         return conditions
+
+    def _defect_event(self, machine_id: str, code: str, at: datetime) -> Event:
+        event = self.events.create(machine_id, "quality_defect_detected", at)
+        payload = {"defect_code": code, "confidence": defect_confidence(event.event_id)}
+        return replace(event, payload=payload)
 
     def _state_events(self, result: MachineTick, at: datetime) -> list[Event]:
         previous = self._last_sent_state[result.external_id]

@@ -13,6 +13,7 @@ import { MachineFlow } from "../components/MachineFlow.tsx";
 import { OeeHourlyChart } from "../components/OeeHourlyChart.tsx";
 import { OeePanel } from "../components/OeePanel.tsx";
 import { Panel } from "../components/Panel.tsx";
+import { QualityCard } from "../components/quality/QualityCard.tsx";
 import { QuickClassifyCard } from "../components/QuickClassifyCard.tsx";
 import { t } from "../i18n/t.ts";
 import type { ClassifyTarget } from "../lib/classifyTarget.ts";
@@ -110,6 +111,8 @@ export function LineOverviewPage() {
           {oee.data && <OeeHourlyChart buckets={oee.data.buckets} zone={zone} />}
         </Panel>
       </div>
+
+      <QualityCard lineId={lineId} shift={shift.data} />
 
       {saved && (
         <p role="status" className="fixed bottom-4 left-4 rounded-lg bg-green-800 px-4 py-3 text-xl text-white">

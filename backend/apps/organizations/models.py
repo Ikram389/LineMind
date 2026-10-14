@@ -4,7 +4,7 @@ plus Membership, which gives a user a role inside one organization.
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.organizations.oee_settings import default_oee_settings, validate_oee_settings
@@ -57,6 +57,12 @@ class Factory(models.Model):
         default=3,
         validators=[MinValueValidator(2)],
         help_text="A machine stopping this many times for the same reason (or alarm) is recurring.",
+    )
+    quality_incident_window_minutes = models.PositiveIntegerField(
+        default=10,
+        validators=[MinValueValidator(1), MaxValueValidator(240)],
+        help_text="A defect is shown with the last line stop that ended this many minutes "
+        "before it (e.g. defects right after a restart).",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

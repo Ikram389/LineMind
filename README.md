@@ -49,6 +49,7 @@ Your database data is kept in a Docker volume. `docker compose down -v` deletes 
 | Load demo data               | `docker compose exec backend python manage.py seed_demo`         |
 | Create a line API key        | `docker compose exec backend python manage.py create_line_api_key <line_id> "<name>"` |
 | Rebuild downtime for a line  | `docker compose exec backend python manage.py rebuild_downtime --line <id>` |
+| Rebuild quality results      | `docker compose exec backend python manage.py rebuild_quality --line <id>` |
 | Create an admin user         | `docker compose exec backend python manage.py createsuperuser`   |
 | Frontend lint                | `docker compose exec frontend npm run lint`                      |
 | Frontend type check          | `docker compose exec frontend npm run typecheck`                 |
@@ -108,6 +109,10 @@ Django admin: create a superuser (see the table above), then open http://localho
 | `/api/v1/shifts/`, `/api/v1/shift-breaks/?shift=<id>` | Shifts (local factory time; may cross midnight) and their breaks |
 | `/api/v1/products/`, `/api/v1/product-cycle-times/` | Products (organization-wide) and line-specific ideal cycle times |
 | `/api/v1/production-orders/?line=&status=&start=&end=` | Which product a line makes when (orders on one line cannot overlap) |
+| `GET /api/v1/quality/summary/`, `/quality/pareto/?group_by=defect_type\|station\|machine\|product`, `/quality/trend/?group_by=hour\|shift\|day` | Defect counts and rates for `line`, `start`/`end` (false rejects excluded and counted separately) |
+| `GET /api/v1/inspection-results/`, `.../export.csv` | One row per detected defect with its production context. Filters: `line`, `station`, `machine`, `defect_type` (code or `unknown`), `severity`, `product`, `reviewed`, `verdict`, `start`/`end` or `shift`+`date` |
+| `GET/POST /api/v1/inspection-results/{id}/reviews/` | Review history, or a new review `{"verdict": "confirmed" \| "false_reject" \| "reclassified", "corrected_defect_type": <id>, "comment": ""}` (quality inspectors, supervisors, factory managers, platform admins) |
+| `/api/v1/defect-types/`, `/api/v1/inspection-stations/?line=` | Defect catalogue (organization-wide) and inspection stations; `archive`/`restore` instead of deleting when used |
 
 Shifts, products and orders: everyone can read; factory managers and platform admins can change (products: only with access to all factories). Every configuration change, including factories, lines and machines, is recorded in the audit log.
 
@@ -244,6 +249,15 @@ What you'll see:
 4. After 90 s everything returns to green.
 
 Use `--mode realtime` for this. In accelerated mode the simulated clock catches up with real time only at the end of the run, so while it runs the data looks out of date and machines show "Unknown".
+
+## Quality
+
+Defects come from the simulator's `quality_defect_detected` events. Each becomes one **inspection result**: where (station, machine), when, what (defect type, confidence), and what the line was doing then (product, machine state, last alarm, and a line stop that ended shortly before). Good bottles are not stored one by one; the inspected volume comes from the machine counters.
+
+- **Quality page** (`/lines/<id>/quality`): summary cards, a defect Pareto (click a bar to filter the table), the defect-rate trend, the results table and CSV export. Quality inspectors, supervisors and managers can **review** a result: confirm it, mark it a **false reject** (it stops counting as a defect, but stays visible with its history), or reclassify it.
+- **Overview:** a quality card with the shift's defect rate, defects and results still to review, updated live.
+- **Quality setup** (`/lines/<id>/quality-setup`, factory managers): defect types and inspection stations.
+- **OEE quality is line-wide:** a bottle rejected at the labeler never reaches the packer, so it is added to the total count and counts as a quality loss (see [docs/PRODUCT.md §4](docs/PRODUCT.md)). Reviews never change OEE: a false reject was still removed from the line.
 
 ## Factory simulator
 

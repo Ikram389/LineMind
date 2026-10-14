@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "apps.production",
     "apps.audit",
     "apps.downtime",
+    "apps.quality",
     "apps.analytics",
     "apps.live",
 ]
@@ -134,6 +135,7 @@ EVENT_BATCH_MAX_SIZE = 500
 
 # Downtime CSV export (apps/downtime/views.py): larger requests must be narrowed.
 DOWNTIME_EXPORT_MAX_ROWS = 50_000
+QUALITY_EXPORT_MAX_ROWS = 50_000
 
 # Tokens are signed with SECRET_KEY (the simplejwt default).
 SIMPLE_JWT = {

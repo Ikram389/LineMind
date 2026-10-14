@@ -50,7 +50,7 @@ class StoredEvent:
     line_id: int
     event_id: UUID
     timestamp: datetime
-    kind: str  # "state", "count" or "other"
+    kind: str  # "state", "count", "defect" or "other"
 
 
 def message(message_type: str, line_id: int, data: dict[str, Any]) -> dict[str, Any]:

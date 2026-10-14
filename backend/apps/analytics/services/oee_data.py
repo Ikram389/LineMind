@@ -14,7 +14,7 @@ from apps.downtime.models import DowntimeEvent
 from apps.organizations.models import Machine, ProductionLine
 from apps.organizations.oee_settings import with_defaults
 from apps.production.models import IngestedEvent
-from apps.production.services.counters import load_readings
+from apps.production.services.counters import load_readings, upstream_machines
 from apps.production.services.orders import active_orders, ideal_cycle_time
 from apps.production.services.shifts import ShiftPeriod, shift_periods
 from apps.production.services.timeset import TimeSet
@@ -54,6 +54,9 @@ def load_line_data(
     )
 
     readings = load_readings(machine, start, end)
+    upstream_readings = tuple(
+        (m.external_id, tuple(load_readings(m, start, end))) for m in upstream_machines(line)
+    )
 
     orders = tuple(
         OrderSpan(
@@ -87,5 +90,6 @@ def load_line_data(
         stale_after_seconds=factory.stale_after_seconds,
         settings=with_defaults(factory.oee_settings),
         now=now,
+        upstream_readings=upstream_readings,
     )
     return data, periods

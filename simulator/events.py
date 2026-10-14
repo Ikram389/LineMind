@@ -75,6 +75,15 @@ class Event:
         )
 
 
+def defect_confidence(event_id: str) -> float:
+    """A stand-in for a vision model's confidence, between 0.80 and 0.99.
+
+    Derived from the event id (not from a random generator), so the same run always
+    gives the same values and the defect stream itself is not affected.
+    """
+    return round(0.80 + (uuid.UUID(event_id).int % 20) / 100, 2)
+
+
 class EventFactory:
     """Creates events with reproducible ids and strictly increasing per-machine timestamps."""
 

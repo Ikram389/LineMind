@@ -17,10 +17,8 @@ def oee_url(bottling: Bottling) -> str:
     return f"/api/v1/lines/{bottling.line.id}/oee/"
 
 
-@pytest.fixture
-def reference(bottling: Bottling, load: Callable[..., None], world: World) -> Bottling:
-    """reference_1h loaded; a break-free shift covering 05:00-13:00 UTC; a 0.6 s product order."""
-    load("reference_1h")
+def plan_reference_hour(bottling: Bottling, world: World) -> None:
+    """A break-free shift covering 05:00-13:00 UTC and a 0.6 s product order."""
     factory = bottling.line.factory  # timezone UTC
     Shift.objects.create(factory=factory, name="Day", start_time=time(5), end_time=time(13))
     product = Product.objects.create(
@@ -34,6 +32,12 @@ def reference(bottling: Bottling, load: Callable[..., None], world: World) -> Bo
         scheduled_end="2026-10-05T13:00:00Z",
         status=OrderStatus.COMPLETED,
     )
+
+
+@pytest.fixture
+def reference(bottling: Bottling, load: Callable[..., None], world: World) -> Bottling:
+    load("reference_1h")
+    plan_reference_hour(bottling, world)
     return bottling
 
 
@@ -61,6 +65,36 @@ def test_end_to_end_reference_case(reference: Bottling, world: World, api: ApiFa
     assert total["data_coverage"]["percent"] == 100.0
     assert total["warnings"] == []
     assert response.json()["counting_machine"] == "M06"
+
+
+def test_end_to_end_reference_quality_case(
+    bottling: Bottling, load: Callable[..., None], world: World, api: ApiFactory
+) -> None:
+    """reference_quality_1h (PRODUCT.md §4): 2% rejected at the labeler, upstream of the packer."""
+    load("reference_quality_1h")
+    plan_reference_hour(bottling, world)
+
+    response = api(world.users["analyst"]).get(oee_url(bottling), {"start": START, "end": END})
+
+    assert response.status_code == 200
+    total = response.json()["total"]
+    inputs = total["inputs"]
+    assert inputs["counting_machine_output"] == 5880
+    assert inputs["counting_machine_rejected_count"] == 0
+    assert inputs["upstream_rejected_by_machine"] == {"M05": 120}
+    assert (inputs["total_count"], inputs["rejected_count"], inputs["good_count"]) == (
+        6000,
+        120,
+        5880,
+    )
+    assert inputs["unplanned_downtime_seconds"] == 0
+    assert [total[k]["percent"] for k in ("availability", "performance", "quality", "oee")] == [
+        100.00,
+        100.00,
+        98.00,
+        98.00,
+    ]
+    assert total["warnings"] == []
 
 
 @pytest.mark.parametrize("group_by", ["hour", "day", "shift"])
