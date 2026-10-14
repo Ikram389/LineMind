@@ -415,21 +415,28 @@ def summary(entries: Sequence[Entry], view: str) -> dict[str, Any]:
     }
 
 
-def recurring(lines: Sequence[ProductionLine], f: AnalysisFilters) -> dict[str, Any]:
-    """Breakdowns (first or secondary) repeating on a machine for the same reason or alarm."""
+def recurring(
+    lines: Sequence[ProductionLine], f: AnalysisFilters, threshold: int | None = None
+) -> dict[str, Any]:
+    """Breakdowns (first or secondary) repeating on a machine for the same reason or alarm.
+
+    `threshold` overrides the factory's `recurring_stop_threshold` (used by alert rules)."""
     end = f.effective_end
     events = _events_in_range(lines, f).filter(category=DowntimeCategory.BREAKDOWN)
     buckets: dict[tuple[int, str], list[DowntimeEvent]] = defaultdict(list)
-    for event in events:
+
+    def key_of(event: DowntimeEvent) -> str:
         reason = event.current_classification.reason if event.current_classification else None
-        key = f"reason:{reason.pk}" if reason else f"alarm:{event.alarm_code or ''}"
-        buckets[(event.machine_id, key)].append(event)
+        return f"reason:{reason.pk}" if reason else f"alarm:{event.alarm_code or ''}"
+
+    for event in events:
+        buckets[(event.machine_id, key_of(event))].append(event)
 
     items = []
     for group in buckets.values():
         first = group[0]
-        threshold = first.line.factory.recurring_stop_threshold
-        if len(group) < threshold:
+        minimum = threshold or first.line.factory.recurring_stop_threshold
+        if len(group) < minimum:
             continue
         reason = first.current_classification.reason if first.current_classification else None
         micros = sum(clipped_micros(e.started_at, e.ended_at, f.start, end) for e in group)
@@ -439,13 +446,15 @@ def recurring(lines: Sequence[ProductionLine], f: AnalysisFilters) -> dict[str, 
                 "reason": reason_summary(reason),
                 "alarm_code": None if reason else first.alarm_code,
                 "count": len(group),
-                "threshold": threshold,
+                "threshold": minimum,
                 "total_seconds": _seconds(micros),
                 "last_occurrence": max(e.started_at for e in group),
+                "first_occurrence": min(e.started_at for e in group),
+                "key": key_of(first),
             }
         )
     items.sort(key=lambda i: (-i["count"], -i["total_seconds"]))
-    thresholds = {line.factory.recurring_stop_threshold for line in lines}
+    thresholds = {threshold or line.factory.recurring_stop_threshold for line in lines}
     return {"threshold": min(thresholds) if thresholds else None, "items": items}
 
 

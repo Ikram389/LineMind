@@ -3,6 +3,9 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
 import { AuthProvider } from "./auth/AuthProvider.tsx";
 import { RequireAuth } from "./auth/RequireAuth.tsx";
+import { AppLayout } from "./components/AppBar.tsx";
+import { AlertRulesPage } from "./pages/AlertRulesPage.tsx";
+import { AlertsPage } from "./pages/AlertsPage.tsx";
 import { DowntimePage } from "./pages/DowntimePage.tsx";
 import { LineOverviewPage } from "./pages/LineOverviewPage.tsx";
 import { LinePickerPage } from "./pages/LinePickerPage.tsx";
@@ -11,6 +14,7 @@ import { MachineDetailPage } from "./pages/MachineDetailPage.tsx";
 import { QualityPage } from "./pages/QualityPage.tsx";
 import { QualitySetupPage } from "./pages/QualitySetupPage.tsx";
 import { ReasonsPage } from "./pages/ReasonsPage.tsx";
+import { SettingsPage } from "./pages/SettingsPage.tsx";
 import { UnclassifiedPage } from "./pages/UnclassifiedPage.tsx";
 
 const queryClient = new QueryClient({
@@ -26,70 +30,26 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            {/* Every signed-in page shares the top bar (alerts bell, settings, log out). */}
             <Route
-              path="/"
               element={
                 <RequireAuth>
-                  <LinePickerPage />
+                  <AppLayout />
                 </RequireAuth>
               }
-            />
-            <Route
-              path="/lines/:lineId"
-              element={
-                <RequireAuth>
-                  <LineOverviewPage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/lines/:lineId/downtime"
-              element={
-                <RequireAuth>
-                  <DowntimePage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/lines/:lineId/unclassified"
-              element={
-                <RequireAuth>
-                  <UnclassifiedPage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/lines/:lineId/reasons"
-              element={
-                <RequireAuth>
-                  <ReasonsPage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/lines/:lineId/quality"
-              element={
-                <RequireAuth>
-                  <QualityPage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/lines/:lineId/quality-setup"
-              element={
-                <RequireAuth>
-                  <QualitySetupPage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/lines/:lineId/machines/:machineId"
-              element={
-                <RequireAuth>
-                  <MachineDetailPage />
-                </RequireAuth>
-              }
-            />
+            >
+              <Route path="/" element={<LinePickerPage />} />
+              <Route path="/alerts" element={<AlertsPage />} />
+              <Route path="/alert-rules" element={<AlertRulesPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/lines/:lineId" element={<LineOverviewPage />} />
+              <Route path="/lines/:lineId/downtime" element={<DowntimePage />} />
+              <Route path="/lines/:lineId/unclassified" element={<UnclassifiedPage />} />
+              <Route path="/lines/:lineId/reasons" element={<ReasonsPage />} />
+              <Route path="/lines/:lineId/quality" element={<QualityPage />} />
+              <Route path="/lines/:lineId/quality-setup" element={<QualitySetupPage />} />
+              <Route path="/lines/:lineId/machines/:machineId" element={<MachineDetailPage />} />
+            </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

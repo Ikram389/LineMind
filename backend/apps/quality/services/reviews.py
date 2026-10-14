@@ -11,6 +11,7 @@ from django.db import transaction
 
 from apps.accounts.models import User
 from apps.audit.services import record_audit
+from apps.notifications.tasks import queue_evaluation
 from apps.organizations.models import Role
 from apps.organizations.tenancy import get_membership
 from apps.quality.models import DefectType, InspectionResult, QualityReview, Verdict
@@ -86,6 +87,7 @@ def review_result(
         )
         result.current_review = review
         result.save(update_fields=["current_review", "updated_at"])
+        queue_evaluation([result.line_id], ["quality"])
         record_audit(
             user=user,
             action="inspectionresult.reviewed",

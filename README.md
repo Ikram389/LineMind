@@ -259,6 +259,24 @@ Defects come from the simulator's `quality_defect_detected` events. Each becomes
 - **Quality setup** (`/lines/<id>/quality-setup`, factory managers): defect types and inspection stations.
 - **OEE quality is line-wide:** a bottle rejected at the labeler never reaches the packer, so it is added to the total count and counts as a quality loss (see [docs/PRODUCT.md §4](docs/PRODUCT.md)). Reviews never change OEE: a false reject was still removed from the line.
 
+## Alerts
+
+LineMind watches the lines and tells the right people when something needs attention. Each factory has **alert rules** (managers edit them at `/alert-rules`):
+
+- a line stop lasting too long;
+- the same stop repeating;
+- a machine sending no data;
+- low OEE for the shift;
+- a high defect rate;
+- stops still waiting for a reason.
+
+When a rule's condition becomes true, one **alert** opens, never duplicates. It closes by itself when the condition clears.
+
+- **The bell** in the top bar counts your unread notifications, live; **Alerts** (`/alerts`) lists every alert, with Acknowledge and Resolve.
+- **Email** goes to the people whose role the rule names. In development no real mail server is needed: open **Mailpit** at http://localhost:8025 to read them. Choose which alerts reach you by email under **Settings**.
+- **Escalation:** an alert nobody acknowledges within its time (default 15 min) is sent to the next people, e.g. factory managers.
+- **Background services:** `worker` and `beat` (Celery) check the rules every 30 seconds. If they stop, `/api/v1/health/` says `"alerts": "stale"` and supervisors see a red warning in the top bar.
+
 ## Factory simulator
 
 The simulator (`simulator/`) is a virtual bottling line: M01 Bottle feeder → M02 Rinser → M03 Filler → M04 Capper → M05 Labeler → M06 Packer, with a conveyor (buffer) between each pair. It plays a **scenario** (a YAML file in `simulator/scenarios/`) and sends the resulting machine events to the event API.

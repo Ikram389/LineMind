@@ -24,6 +24,7 @@ from rest_framework import serializers
 
 from apps.downtime.services.derivation import rebuild_after_ingestion
 from apps.live.broadcast import StoredEvent, queue_after_ingestion
+from apps.notifications.tasks import queue_evaluation
 from apps.production.event_types import EVENT_TYPE_TO_STATE, PRODUCTION_EVENT_TYPES, EventType
 from apps.production.models import (
     IngestedEvent,
@@ -80,6 +81,13 @@ def _after_store(stored: list[StoredEvent]) -> None:
     defect_ids = [event.event_id for event in stored if event.kind == "defect"]
     if defect_ids:
         queue_quality_updates(process_after_ingestion(defect_ids))
+    # Alert rules that this data can affect, evaluated after the commit (Celery).
+    triggers = {"ingestion"}
+    if any(event.kind == "state" for event in stored):
+        triggers.add("downtime")
+    if defect_ids:
+        triggers.add("quality")
+    queue_evaluation({event.line_id for event in stored}, triggers)
 
 
 def _ingest_one(api_key: LineApiKey, data: object, received_at: datetime) -> IngestResult:

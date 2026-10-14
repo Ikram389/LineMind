@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useParams } from "react-router";
 
 import { getLineStatus, getOee } from "../api/endpoints.ts";
+import type { LiveMessage } from "../api/types.ts";
 import { queryKeys } from "../api/queryKeys.ts";
+import { AlertBanner } from "../components/alerts/AlertBanner.tsx";
 import { ClassifyPanel } from "../components/ClassifyPanel.tsx";
 import { Header } from "../components/Header.tsx";
 import { IncidentBanner } from "../components/IncidentBanner.tsx";
@@ -19,6 +21,7 @@ import { t } from "../i18n/t.ts";
 import type { ClassifyTarget } from "../lib/classifyTarget.ts";
 import { usePermissions } from "../lib/permissions.ts";
 import { serverNow, useServerNow } from "../lib/serverClock.ts";
+import { useAlertBanners } from "../live/useAlertBanners.ts";
 import { useClassificationPrompts } from "../live/useClassificationPrompts.ts";
 import { useLineLive } from "../live/useLineLive.ts";
 import { useLineContext } from "./useLineContext.ts";
@@ -30,7 +33,16 @@ export function LineOverviewPage() {
   const lineId = Number(useParams().lineId);
   const nowMs = useServerNow();
   const { prompts, onMessage, dismiss } = useClassificationPrompts();
-  const live = useLineLive(lineId, onMessage);
+  const banners = useAlertBanners(lineId);
+  const onAlertMessage = banners.onMessage;
+  const onLiveMessage = useCallback(
+    (message: LiveMessage) => {
+      onMessage(message);
+      onAlertMessage(message);
+    },
+    [onMessage, onAlertMessage],
+  );
+  const live = useLineLive(lineId, onLiveMessage);
   const { canClassify } = usePermissions();
   const [panelFor, setPanelFor] = useState<ClassifyTarget | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -76,6 +88,9 @@ export function LineOverviewPage() {
       />
       <LineNav lineId={lineId} shift={shift.data} />
 
+      {banners.banners.map((alert) => (
+        <AlertBanner key={alert.alert_id} alert={alert} zone={zone} onHide={() => banners.hide(alert.alert_id)} />
+      ))}
       {incident && <IncidentBanner incident={incident} nowMs={nowMs} />}
 
       <Panel isLoading={status.isLoading} isError={status.isError && !status.data}>

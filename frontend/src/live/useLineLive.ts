@@ -24,6 +24,10 @@ let socketFactory: SocketFactory = (url) => new WebSocket(url);
 export function setSocketFactory(factory: SocketFactory): void {
   socketFactory = factory;
 }
+/** Open a socket with the current factory (shared with useUserLive). */
+export function openSocket(url: string): WebSocket {
+  return socketFactory(url);
+}
 
 const MAX_BACKOFF_MS = 30_000;
 
@@ -109,6 +113,11 @@ export function applyLiveMessage(
       }
       void queryClient.invalidateQueries({ queryKey: queryKeys.oee(lineId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.downtime });
+      return;
+    case "alert_opened":
+    case "alert_updated":
+    case "alert_resolved":
+      void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
       return;
     case "quality_updated":
       // The overview card shows these numbers directly; other quality views refetch.

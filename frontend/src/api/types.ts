@@ -1,4 +1,5 @@
 /** Types matching the LineMind backend API (/api/v1/). Dates are ISO 8601 strings in UTC. */
+import type { AlertSeverity, AlertStatus, MessageValues, RuleType } from "./alertTypes.ts";
 import type { ShiftQuality } from "./qualityTypes.ts";
 
 export type MachineState =
@@ -230,9 +231,34 @@ export type IncidentClosed = Envelope<
 
 export type QualityUpdated = Envelope<"quality_updated", ShiftQuality>;
 
+/** What alert messages carry (a summary of the alert). */
+export interface AlertSummary {
+  alert_id: number;
+  rule_type: RuleType;
+  severity: AlertSeverity;
+  status: AlertStatus;
+  line_id: number | null;
+  machine_id: number | null;
+  subject_type: string;
+  subject_id: number | null;
+  opened_at: string;
+  condition_since: string;
+  message_key: string;
+  message_values: MessageValues;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+  resolution: string;
+}
+
+export type AlertChanged = Envelope<"alert_opened" | "alert_updated" | "alert_resolved", AlertSummary>;
+
+/** Sent to the user's own socket (/ws/me/). */
+export type NotificationsChanged = Envelope<"notifications_changed", { unread_count: number }>;
+
 export type LiveMessage =
   | MachineStateChanged
   | CountUpdated
   | IncidentChanged
   | IncidentClosed
-  | QualityUpdated;
+  | QualityUpdated
+  | AlertChanged;

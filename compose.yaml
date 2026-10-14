@@ -23,8 +23,10 @@ services:
   backend:
     build: ./backend
     env_file: .env
-    environment:
+    environment: &backend-environment
       REDIS_URL: redis://redis:6379/0
+      EMAIL_HOST: mailpit
+      EMAIL_PORT: "1025"
     volumes:
       - ./backend:/app
     ports:
@@ -35,6 +37,38 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # Background jobs: event-driven alert evaluation and emails (apps/notifications/tasks.py).
+  worker:
+    build: ./backend
+    command: celery -A config worker -l info --concurrency 2
+    env_file: .env
+    environment: *backend-environment
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Clock for background jobs: runs the alert evaluation every 30 seconds.
+  beat:
+    build: ./backend
+    command: celery -A config beat -l info --schedule /tmp/celerybeat-schedule
+    env_file: .env
+    environment: *backend-environment
+    volumes:
+      - ./backend:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Catches every email sent in development. Open http://localhost:8025 to read them.
+  mailpit:
+    image: axllent/mailpit:v1.20
+    ports:
+      - "8025:8025"
 
   frontend:
     build: ./frontend

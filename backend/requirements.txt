@@ -9,6 +9,8 @@ daphne>=4.1,<5.0
 channels>=4.2,<5.0
 channels-redis>=4.2,<5.0
 redis>=5.0,<7.0
+# Background jobs: alert evaluation every 30 s (beat), event-driven evaluation and emails
+celery[redis]>=5.4,<6.0
 
 # Development tools
 pytest>=8.3,<9.0

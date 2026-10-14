@@ -13,6 +13,7 @@ from apps.downtime.models import (
     DowntimeEvent,
     DowntimeReason,
 )
+from apps.notifications.tasks import queue_evaluation
 from apps.organizations.models import Role
 from apps.organizations.tenancy import get_membership
 
@@ -64,6 +65,7 @@ def classify_downtime(
         )
         event.current_classification = classification
         event.save(update_fields=["current_classification", "updated_at"])
+        queue_evaluation([event.line_id], ["classification"])
         record_audit(
             user=user,
             action="downtime.classified",

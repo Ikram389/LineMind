@@ -17,7 +17,10 @@ def test_health_reports_ok_when_database_is_reachable(client: APIClient) -> None
     response = client.get(HEALTH_URL)
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "database": "ok"}
+    body = response.json()
+    assert (body["status"], body["database"]) == ("ok", "ok")
+    # No periodic evaluation has ever run here: the alert engine is reported as stale.
+    assert (body["alerts"], body["alerts_last_heartbeat"]) == ("stale", None)
 
 
 def test_health_reports_error_when_database_is_unreachable(client: APIClient) -> None:

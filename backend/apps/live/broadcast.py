@@ -42,6 +42,11 @@ def line_group(line_id: int) -> str:
     return f"line_{line_id}"
 
 
+def user_group(user_id: int) -> str:
+    """One group per user (/ws/me/): their notifications, wherever they are in the app."""
+    return f"user_{user_id}"
+
+
 @dataclass(frozen=True)
 class StoredEvent:
     """What the ingestion service tells us about each newly stored event."""
@@ -59,13 +64,13 @@ def message(message_type: str, line_id: int, data: dict[str, Any]) -> dict[str, 
     return json.loads(json.dumps(envelope, cls=DjangoJSONEncoder))
 
 
-def send_now(line_id: int, payload: dict[str, Any]) -> None:
+def send_now(line_id: int, payload: dict[str, Any], group: str | None = None) -> None:
     layer = get_channel_layer()
     if layer is None:
         return
     try:
         async_to_sync(layer.group_send)(
-            line_group(line_id), {"type": "live.message", "message": payload}
+            group or line_group(line_id), {"type": "live.message", "message": payload}
         )
     except Exception:  # live updates must never break ingestion
         logger.exception("Could not send live message %s", payload.get("type"))

@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.downtime.default_reasons import ensure_default_reasons
+from apps.notifications.defaults import ensure_default_rules
 from apps.organizations.models import (
     Factory,
     Machine,
@@ -96,6 +97,7 @@ class Command(BaseCommand):
             )
             self._create_planning(demo_org)
             self._create_quality(demo_org)
+            ensure_default_rules(Factory.objects.get(organization=demo_org, name=DEMO_FACTORY[0]))
 
             emails = [
                 self._create_member(f"{role.value}@{DEMO_EMAIL_DOMAIN}", password, demo_org, role)

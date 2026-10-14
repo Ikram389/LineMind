@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "apps.audit",
     "apps.downtime",
     "apps.quality",
+    "apps.notifications",
     "apps.analytics",
     "apps.live",
 ]
@@ -128,6 +129,31 @@ if REDIS_URL:
 else:
     CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
     CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
+# Background jobs (Celery, apps/notifications/tasks.py). Redis database 1 is the broker.
+# Without REDIS_URL (tests, a plain dev server) tasks run immediately in the calling process.
+CELERY_BROKER_URL = os.environ.get(
+    "CELERY_BROKER_URL", REDIS_URL.rsplit("/", 1)[0] + "/1" if REDIS_URL else ""
+)
+CELERY_TASK_ALWAYS_EAGER = not CELERY_BROKER_URL
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TIMEZONE = "UTC"
+CELERY_BEAT_SCHEDULE = {
+    "evaluate-alerts": {"task": "notifications.evaluate_periodic", "schedule": 30.0},
+}
+# The alert engine is "stale" when its periodic evaluation has not run for this long.
+ALERT_ENGINE_STALE_SECONDS = 120
+
+# Email (alerts). In development Mailpit catches every message: http://localhost:8025
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "1025"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "false").lower() == "true"
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "LineMind <alerts@linemind.local>")
+# Links in emails point to the web app.
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
 
 # Event ingestion (apps/production/services/ingestion.py)
 EVENT_MAX_FUTURE_SECONDS = 300  # reject events stamped more than 5 minutes in the future

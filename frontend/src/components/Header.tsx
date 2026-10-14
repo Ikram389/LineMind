@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
 import type { CurrentShift } from "../api/types.ts";
-import { useAuth } from "../auth/context.ts";
 import { t } from "../i18n/t.ts";
 import { formatClock, formatShortDuration, formatTime, secondsBetween } from "../lib/time.ts";
 
@@ -15,7 +14,6 @@ interface HeaderProps {
 }
 
 export function Header({ factoryName, lineName, zone, shift, nowMs, live }: HeaderProps) {
-  const { logout } = useAuth();
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-gray-900 px-5 py-3 text-white">
       <div>
@@ -48,13 +46,6 @@ export function Header({ factoryName, lineName, zone, shift, nowMs, live }: Head
       </div>
       <div className="flex items-center gap-3">
         {live}
-        <button
-          type="button"
-          onClick={logout}
-          className="rounded-md border border-gray-500 px-3 py-2 text-lg hover:bg-gray-800"
-        >
-          {t("nav.logout")}
-        </button>
       </div>
     </header>
   );

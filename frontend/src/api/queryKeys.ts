@@ -21,4 +21,13 @@ export const queryKeys = {
   shiftQuality: (lineId: number) => ["quality", "shift", lineId] as const,
   defectTypes: (includeArchived = false) => ["defectTypes", includeArchived] as const,
   stations: (lineId: number, includeArchived = false) => ["stations", lineId, includeArchived] as const,
+  /** Everything about alerts (refreshed by alert messages and actions). */
+  alerts: ["alerts"] as const,
+  alertList: (params: unknown) => ["alerts", "list", params] as const,
+  notifications: ["notifications"] as const,
+  unreadCount: ["notifications", "unread"] as const,
+  alertRules: (factoryId: number) => ["alertRules", factoryId] as const,
+  ruleTypes: ["ruleTypes"] as const,
+  preferences: ["preferences"] as const,
+  health: ["health"] as const,
 };

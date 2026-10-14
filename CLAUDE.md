@@ -51,6 +51,10 @@ Django apps live in `backend/apps/<name>/` (accounts, organizations, production,
 - CSV export from the shell: `GET /api/v1/downtime-events/export.csv?line=<id>&start=ISO&end=ISO[&view=line]` (JWT)
 - Quality screens: http://localhost:5173/lines/<id>/quality (summary, Pareto, trend, results, reviews), `/lines/<id>/quality-setup` (defect types and stations, factory managers)
 - Rebuild inspection results from the raw defect events (idempotent; reviews stay attached; run after the first `migrate` of step 9, or if processing failed): `docker compose exec backend python manage.py rebuild_quality --line <id> [--start ISO] [--end ISO]`
+- Alerts (step 10a): `docker compose up` also starts `worker` (Celery), `beat` (alert evaluation every 30 s) and `mailpit`. Read alert emails at http://localhost:8025. Logs: `docker compose logs -f worker beat`
+- Is the alert engine running? `GET /api/v1/health/` reports `"alerts": "ok"` or `"stale"` (no evaluation for 2 min); supervisors and above also see a red warning in the top bar
+- Evaluate all alert rules once by hand: `docker compose exec backend python manage.py shell -c "from apps.notifications.tasks import evaluate_periodic; print(evaluate_periodic())"`
+- After changing backend requirements (e.g. Celery): `docker compose up -d --build backend worker beat`
 - Quality endpoints (JWT; range required): `GET /api/v1/quality/summary|pareto|trend/?line=<id>&start=ISO&end=ISO`, `GET /api/v1/inspection-results/[export.csv]`, `POST /api/v1/inspection-results/<id>/reviews/`
 - After changing `frontend/package.json`: `docker compose up -d --build -V frontend` (`-V` renews the container's node_modules volume)
 - Dashboard: http://localhost:5173 (log in e.g. as `production_supervisor@demo-beverages.test`); live data: `docker compose run --rm simulator python main.py --scenario scenarios/labeler_jam.yaml --mode realtime`
@@ -196,6 +200,33 @@ Code lives in `backend/apps/quality/` (step 9). Rules are in `docs/PRODUCT.md` Â
 - **Live updates.** `quality_updated` (`services/live.py`) is sent after commit, at most once per line every 5 s, after new defects or a review. The overview card also refreshes every minute because throttled messages can be dropped.
 - **Configuration.** Defect types are organization-wide (like products: writes need all factories). Stations are per line. Both archive instead of delete when used (409). A used defect type's code can't change.
 - **Tests.** The fixtures `reference_quality_1h` (OEE 98.00%) and `normal_shift_150m` carry defect confidences. Use the `catalogue` and `defect` fixtures in `apps/quality/tests/conftest.py`.
+
+## Alerts
+Code lives in `backend/apps/notifications/` (step 10a).
+- **Rule types are evaluators** (`evaluators/rules.py`, interface in `evaluators/base.py`).
+  - Each has a parameters serializer (validation and defaults), `triggers` (events after which it is re-checked), `time_driven`, and `findings(rule, ctx)`: the subjects the condition is true for *now*.
+  - Numbers come from the existing services (downtime, OEE, quality metrics), never recomputed here.
+  - To add a type, write a class and register it in `EVALUATORS`.
+- **The engine** (`services/engine.py`) is the only code that opens or auto-resolves alerts:
+  - a finding without an unresolved alert opens one, unless it's suppressed or in cooldown;
+  - an unresolved alert whose finding is gone resolves (`resolution=auto`);
+  - running it twice changes nothing.
+- **Deduplication is in the database.** A partial unique constraint allows one unresolved alert per rule + `subject_key`; `_open()` catches the IntegrityError, so two workers can't create duplicates. Never remove it or create alerts elsewhere.
+- **Suppression** (`RuleEvaluator.suppressed`): no new alerts outside shifts, during breaks or planned stops, unless `active_outside_shifts`. Open alerts still resolve.
+- **When rules are evaluated.**
+  - Event-driven: `tasks.queue_evaluation(line_ids, triggers)` runs after commit from ingestion (`ingestion`, `downtime`, `quality`), classification and quality reviews.
+  - Time-driven: beat runs `evaluate_periodic` every 30 s (every enabled rule, then escalation). It writes the `periodic` heartbeat; every finished task writes `worker` (`signals.py`).
+- **Notifications** (`services/notify.py`):
+  - Recipients come from `services/recipients.py`: active users of the alert's organization and factory with a rule role.
+  - Each user's `NotificationPreference` decides in-app (never off) and email.
+  - Emails are sent by `send_alert_email` with retries (30 s, 2 min, 8 min), then marked `failed`. Without a broker it retries immediately.
+  - Live messages go after commit: `alert_opened/updated/resolved` to the line group, `notifications_changed {unread_count}` to the user group (`/ws/me/`).
+- **Escalation** (`services/escalation.py`): warning and critical alerts still `open` after `escalate_after_minutes` go once to `escalation_roles`. A conditional update on `escalated_at` makes it happen once.
+- **People's actions** (`services/actions.py`, audited):
+  - Acknowledge: the rule's roles, escalation roles, and supervisors and above. The API returns `can_acknowledge` per alert.
+  - Resolve: supervisors and above, with a note.
+- **Text.** Alerts store `message_key` + `message_values`. The UI translates them (`en.ts`, keys `alert.*`); emails use `services/messages.py`. Keep both in sync.
+- **Tests.** `apps/notifications/tests/` uses explicit `now` values (`support.T`) and the `day_shift`, `make_rule` and `evaluate` fixtures. Celery runs eagerly in tests (`settings_test.py`).
 
 ## Non-negotiable rules
 1. **Tenant isolation.** Every query that returns organization data is filtered by the requesting user's organization and permitted factories, enforced on the server (querysets/permissions), never only in the UI. Every new endpoint gets a test proving a user from another organization gets 404/403.
