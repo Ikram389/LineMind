@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
 import { t } from "../i18n/t.ts";
+import { Card } from "./ui/Card.tsx";
+import { EmptyState, ErrorState, Skeleton } from "./ui/Feedback.tsx";
 
 interface PanelProps {
   title?: string;
@@ -9,10 +11,12 @@ interface PanelProps {
   isEmpty?: boolean;
   emptyText?: string;
   className?: string;
+  /** Controls on the right of the title. */
+  actions?: ReactNode;
   children?: ReactNode;
 }
 
-/** A titled box with consistent loading, error and empty states. */
+/** A card with consistent loading (skeleton), error and empty states. */
 export function Panel({
   title,
   isLoading = false,
@@ -20,17 +24,17 @@ export function Panel({
   isEmpty = false,
   emptyText,
   className = "",
+  actions,
   children,
 }: PanelProps) {
   let body: ReactNode = children;
-  if (isLoading) body = <p className="text-lg text-gray-500">{t("panel.loading")}</p>;
-  else if (isError) body = <p className="text-lg text-red-700" role="alert">{t("panel.error")}</p>;
-  else if (isEmpty) body = <p className="text-lg text-gray-500">{emptyText ?? t("panel.empty")}</p>;
+  if (isLoading) body = <Skeleton />;
+  else if (isError) body = <ErrorState />;
+  else if (isEmpty) body = <EmptyState title={emptyText ?? t("panel.empty")} />;
 
   return (
-    <section className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm ${className}`}>
-      {title && <h2 className="mb-3 text-xl font-semibold text-gray-800">{title}</h2>}
+    <Card title={title} actions={actions} className={className}>
       {body}
-    </section>
+    </Card>
   );
 }

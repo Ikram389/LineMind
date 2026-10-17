@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
 import { AuthProvider } from "./auth/AuthProvider.tsx";
@@ -18,6 +19,9 @@ import { QualitySetupPage } from "./pages/QualitySetupPage.tsx";
 import { ReasonsPage } from "./pages/ReasonsPage.tsx";
 import { SettingsPage } from "./pages/SettingsPage.tsx";
 import { UnclassifiedPage } from "./pages/UnclassifiedPage.tsx";
+
+// The component gallery exists only in development builds.
+const DevUiPage = import.meta.env.DEV ? lazy(() => import("./pages/DevUiPage.tsx")) : null;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -53,6 +57,16 @@ export default function App() {
               <Route path="/lines/:lineId/quality" element={<QualityPage />} />
               <Route path="/lines/:lineId/quality-setup" element={<QualitySetupPage />} />
               <Route path="/lines/:lineId/machines/:machineId" element={<MachineDetailPage />} />
+              {DevUiPage && (
+                <Route
+                  path="/dev/ui"
+                  element={
+                    <Suspense>
+                      <DevUiPage />
+                    </Suspense>
+                  }
+                />
+              )}
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

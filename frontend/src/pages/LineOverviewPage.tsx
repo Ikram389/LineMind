@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { Minimize, Tv } from "lucide-react";
 import { useCallback, useState } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 
 import { getLineStatus, getOee } from "../api/endpoints.ts";
 import type { LiveMessage } from "../api/types.ts";
@@ -9,7 +10,7 @@ import { AlertBanner } from "../components/alerts/AlertBanner.tsx";
 import { ClassifyPanel } from "../components/ClassifyPanel.tsx";
 import { Header } from "../components/Header.tsx";
 import { IncidentBanner } from "../components/IncidentBanner.tsx";
-import { LineNav } from "../components/LineNav.tsx";
+import { UnclassifiedBadge } from "../components/LineNav.tsx";
 import { LiveIndicator } from "../components/LiveIndicator.tsx";
 import { MachineFlow } from "../components/MachineFlow.tsx";
 import { OeeHourlyChart } from "../components/OeeHourlyChart.tsx";
@@ -17,6 +18,8 @@ import { OeePanel } from "../components/OeePanel.tsx";
 import { Panel } from "../components/Panel.tsx";
 import { QualityCard } from "../components/quality/QualityCard.tsx";
 import { QuickClassifyCard } from "../components/QuickClassifyCard.tsx";
+import { Button } from "../components/ui/Button.tsx";
+import { Toast } from "../components/ui/Toast.tsx";
 import { t } from "../i18n/t.ts";
 import type { ClassifyTarget } from "../lib/classifyTarget.ts";
 import { usePermissions } from "../lib/permissions.ts";
@@ -46,6 +49,7 @@ export function LineOverviewPage() {
   const { canClassify } = usePermissions();
   const [panelFor, setPanelFor] = useState<ClassifyTarget | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const hideSaved = useCallback(() => setSaved(null), []);
   const { line, factory, shift } = useLineContext(lineId);
 
   const status = useQuery({
@@ -77,23 +81,28 @@ export function LineOverviewPage() {
   const incident = status.data?.open_incident ?? null;
 
   return (
-    <main className="flex min-h-screen flex-col gap-4 bg-gray-100 p-4">
+    <main className="flex flex-col gap-6 p-4 sm:p-6">
       <Header
         factoryName={factory.data?.name ?? ""}
         lineName={line.data?.name ?? ""}
         zone={zone}
         shift={shift.data}
         nowMs={nowMs}
-        live={<LiveIndicator status={live} />}
+        actions={
+          <>
+            <LiveIndicator status={live} />
+            <UnclassifiedBadge lineId={lineId} shift={shift.data} />
+            <TvButton />
+          </>
+        }
       />
-      <LineNav lineId={lineId} shift={shift.data} />
 
       {banners.banners.map((alert) => (
         <AlertBanner key={alert.alert_id} alert={alert} zone={zone} onHide={() => banners.hide(alert.alert_id)} />
       ))}
       {incident && <IncidentBanner incident={incident} nowMs={nowMs} />}
 
-      <Panel isLoading={status.isLoading} isError={status.isError && !status.data}>
+      <Panel title={t("overview.machines")} isLoading={status.isLoading} isError={status.isError && !status.data}>
         {status.data && (
           <MachineFlow
             machines={status.data.machines}
@@ -106,7 +115,7 @@ export function LineOverviewPage() {
         )}
       </Panel>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-2">
         <Panel
           title={t("oee.title")}
           isLoading={shiftStart !== null && oee.isLoading}
@@ -129,11 +138,7 @@ export function LineOverviewPage() {
 
       <QualityCard lineId={lineId} shift={shift.data} />
 
-      {saved && (
-        <p role="status" className="fixed bottom-4 left-4 rounded-lg bg-green-800 px-4 py-3 text-xl text-white">
-          {t("classify.saved", { reason: saved })}
-        </p>
-      )}
+      {saved && <Toast message={t("classify.saved", { reason: saved })} onClose={hideSaved} />}
       {canClassify && prompts[0] && (
         <aside className="fixed bottom-4 right-4 z-30 w-[min(44rem,calc(100vw-2rem))]">
           <QuickClassifyCard
@@ -161,5 +166,36 @@ export function LineOverviewPage() {
         />
       )}
     </main>
+  );
+}
+
+/** Opens TV mode (full screen, no menus) or, in TV mode, leaves it. */
+function TvButton() {
+  const [params, setParams] = useSearchParams();
+  const tv = params.get("tv") === "1";
+  if (tv) {
+    return (
+      <Button
+        variant="ghost"
+        icon={<Minimize aria-hidden className="h-5 w-5" />}
+        onClick={() => {
+          if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => undefined);
+          setParams({});
+        }}
+      >
+        {t("tv.exit")}
+      </Button>
+    );
+  }
+  return (
+    <Button
+      icon={<Tv aria-hidden className="h-5 w-5" />}
+      onClick={() => {
+        void document.documentElement.requestFullscreen?.().catch(() => undefined);
+        setParams({ tv: "1" });
+      }}
+    >
+      {t("tv.open")}
+    </Button>
   );
 }

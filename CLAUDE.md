@@ -60,6 +60,9 @@ Django apps live in `backend/apps/<name>/` (accounts, organizations, production,
 - Effectiveness demo data (7 days each, ~10 min to send; nothing else must cover these dates): `docker compose run --rm simulator python main.py --scenario scenarios/labeler_recurring_jams.yaml --mode backfill` (2026-09-28 → 10-05), complete the action with fix date 2026-10-05 05:00 UTC, then the same with `scenarios/labeler_after_fix.yaml` (10-05 → 10-12)
 - Quality endpoints (JWT; range required): `GET /api/v1/quality/summary|pareto|trend/?line=<id>&start=ISO&end=ISO`, `GET /api/v1/inspection-results/[export.csv]`, `POST /api/v1/inspection-results/<id>/reviews/`
 - After changing `frontend/package.json`: `docker compose up -d --build -V frontend` (`-V` renews the container's node_modules volume)
+- UI screenshots of every page at 1440x900, 1280x800 and 1920x1080 (needs live data, e.g. a realtime simulator run): `docker compose run --rm -e SHOT_LABEL=after e2e npm run screenshots` (writes `e2e/screenshots/<label>/`, not in git; `SHOT_PAGES=01,15` for some pages; compare with `e2e/screenshots/compare.html`)
+- Accessibility check (axe, WCAG AA, light and dark): `docker compose run --rm e2e npm run a11y` (`A11Y_PAGES=overview,tv` for some pages)
+- Design system gallery (development only): http://localhost:5173/dev/ui
 - Dashboard: http://localhost:5173 (log in e.g. as `production_supervisor@demo-beverages.test`); live data: `docker compose run --rm simulator python main.py --scenario scenarios/labeler_jam.yaml --mode realtime`
 - Simulator tests/lint (no backend needed): `docker compose run --rm simulator pytest` / `docker compose run --rm simulator ruff check .`
 - Run the simulator (needs `SIMULATOR_API_KEY` in `.env`): `docker compose run --rm simulator python main.py --scenario scenarios/<name>.yaml --mode backfill --start 2026-10-05T06:00:00Z` (or `--mode accelerated --speed 60`, `--mode realtime`; `--output file` writes JSON Lines to `simulator/data/`)

@@ -1,8 +1,10 @@
+import { Flag, OctagonAlert } from "lucide-react";
 import { Link } from "react-router";
 
 import type { MachineStatus } from "../api/types.ts";
 import { t } from "../i18n/t.ts";
 import { alarmToShow } from "../lib/alarms.ts";
+import { cn } from "../lib/cn.ts";
 import { STATE_STYLES, effectiveState } from "../lib/states.ts";
 import { formatDuration, formatShortDuration, secondsBetween } from "../lib/time.ts";
 
@@ -33,42 +35,45 @@ export function MachineCard({
       data-testid={`machine-${machine.external_id}`}
       data-state={state}
       data-first-stop={isFirstStop || undefined}
-      className={`flex h-full min-w-[11rem] flex-col gap-2 rounded-xl border-4 p-4 ${style.card} ${
-        isFirstStop ? "ring-8 ring-red-500/60 outline-4 outline-offset-4 outline-red-700" : ""
-      }`}
+      className={cn(
+        "flex h-full flex-col gap-3 rounded-card border-2 border-t-8 bg-surface p-4",
+        style.border,
+        isFirstStop && "outline-4 outline-offset-2 outline-critical",
+      )}
     >
-      <header>
-        <p className="text-sm font-semibold uppercase tracking-wide text-gray-600">
-          {machine.external_id}
-        </p>
-        <h3 className="text-2xl font-bold text-gray-900">{machine.name}</h3>
+      <header className="min-w-0">
+        <p className="text-caption font-semibold uppercase tracking-wide text-ink-muted">{machine.external_id}</p>
+        <h3 className="truncate text-title font-bold text-ink">{machine.name}</h3>
       </header>
 
-      <p className={`flex items-center gap-2 text-3xl font-extrabold uppercase ${style.text}`}>
-        <Icon aria-hidden data-icon={state} className="h-8 w-8 shrink-0" />
-        <span>{t(style.label)}</span>
-      </p>
-      {since && (
-        <p className="text-xl tabular-nums text-gray-800">
-          {t("machine.since", { duration: formatDuration(secondsBetween(since, nowMs)) })}
+      <div className={cn("flex min-w-0 flex-col gap-1 rounded-control px-3 py-2", style.soft)}>
+        <p className={cn("flex items-center gap-2 text-body font-extrabold uppercase tracking-wide break-words", style.text)}>
+          <Icon aria-hidden data-icon={state} className="h-5 w-5 shrink-0" />
+          <span>{t(style.label)}</span>
         </p>
-      )}
-      {state === "unknown" && <p className="text-base text-gray-600">{t("state.unknownHint")}</p>}
+        {since && (
+          <p className="text-body tabular-nums text-ink">
+            {t("machine.since", { duration: formatDuration(secondsBetween(since, nowMs)) })}
+          </p>
+        )}
+        {state === "unknown" && <p className="text-small text-ink-muted">{t("state.unknownHint")}</p>}
+      </div>
 
-      <p className="text-lg text-gray-800">
-        <span className="text-gray-600">{t("machine.shiftCount")}: </span>
-        <span className="font-semibold tabular-nums">
+      <p className="flex flex-col">
+        <span className="text-small text-ink-muted">{t("machine.shiftCount")}</span>
+        <span className="text-title font-bold tabular-nums text-ink">
           {machine.shift_count === null ? t("machine.noShift") : machine.shift_count.toLocaleString("en-GB")}
         </span>
       </p>
 
       {alarm?.kind === "current" && (
-        <p className="rounded-md bg-red-700 px-2 py-1 text-xl font-bold text-white">
+        <p className="flex items-center gap-2 rounded-control bg-critical px-3 py-1.5 text-body font-bold text-surface">
+          <OctagonAlert aria-hidden className="h-5 w-5 shrink-0" />
           {t("machine.alarm", { code: alarm.code })}
         </p>
       )}
       {alarm?.kind === "last" && (
-        <p className="text-sm text-gray-500">
+        <p className="text-small text-ink-muted">
           {t("machine.lastAlarm", {
             code: alarm.code,
             ago: formatShortDuration(secondsBetween(alarm.at, nowMs)),
@@ -77,7 +82,8 @@ export function MachineCard({
       )}
 
       {isFirstStop && (
-        <p className="mt-auto rounded-md bg-red-800 px-2 py-1 text-center text-base font-bold uppercase text-white">
+        <p className="mt-auto flex items-center justify-center gap-2 rounded-control bg-critical-soft px-2 py-1.5 text-small font-bold uppercase text-critical">
+          <Flag aria-hidden className="h-4 w-4 shrink-0" />
           {t("machine.firstStop")}
         </p>
       )}
@@ -86,7 +92,7 @@ export function MachineCard({
 
   if (!href) return content;
   return (
-    <Link to={href} aria-label={t("machine.open", { name: machine.name })} className="block h-full">
+    <Link to={href} aria-label={t("machine.open", { name: machine.name })} className="block h-full rounded-card hover:opacity-90">
       {content}
     </Link>
   );

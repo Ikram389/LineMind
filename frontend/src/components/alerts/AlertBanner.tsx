@@ -7,6 +7,7 @@ import type { AlertSummary } from "../../api/types.ts";
 import { t } from "../../i18n/t.ts";
 import { alertMessage, severityLabel, SEVERITY_STYLE } from "../../lib/alertText.ts";
 import { formatTime } from "../../lib/time.ts";
+import { buttonClass } from "../ui/buttonClass.ts";
 
 interface AlertBannerProps {
   alert: AlertSummary;
@@ -31,10 +32,10 @@ export function AlertBanner({ alert, zone, onHide }: AlertBannerProps) {
       role="status"
       aria-label={t("banner.label")}
       data-testid="alert-banner"
-      className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border-l-8 p-4 shadow ${SEVERITY_STYLE[alert.severity]}`}
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-card border-l-8 p-4 ${SEVERITY_STYLE[alert.severity]}`}
     >
-      <p className="flex items-center gap-3 text-xl font-semibold">
-        <Icon aria-hidden className="h-8 w-8 shrink-0" />
+      <p className="flex items-center gap-3 text-title font-semibold">
+        <Icon aria-hidden className="h-7 w-7 shrink-0" />
         <span>
           {severityLabel(alert.severity)}: {alertMessage(alert.message_key, alert.message_values)} —{" "}
           {t("banner.since", { time: formatTime(alert.condition_since, zone) })}
@@ -42,20 +43,20 @@ export function AlertBanner({ alert, zone, onHide }: AlertBannerProps) {
       </p>
       <div className="flex gap-2">
         {acknowledged ? (
-          <span className="self-center text-lg font-semibold">✓ {t("banner.acknowledged")}</span>
+          <span className="self-center text-body font-semibold">✓ {t("banner.acknowledged")}</span>
         ) : (
           full.data?.can_acknowledge && (
             <button
               type="button"
               onClick={() => ack.mutate()}
               disabled={ack.isPending}
-              className="min-h-14 rounded-xl bg-gray-900 px-6 text-xl font-bold text-white"
+              className={buttonClass("primary", "lg")}
             >
               ✓ {t("alerts.acknowledge")}
             </button>
           )
         )}
-        <button type="button" onClick={onHide} className="min-h-14 rounded-xl border-2 border-gray-500 px-4 text-lg">
+        <button type="button" onClick={onHide} className={buttonClass("secondary", "lg")}>
           {t("banner.hide")}
         </button>
       </div>

@@ -19,9 +19,9 @@ export const severityLabel = (severity: AlertSeverity): string => t(`severity.${
 export const ruleTypeLabel = (type: RuleType): string => t(`ruleType.${type}` as MessageKey);
 
 export const SEVERITY_STYLE: Record<AlertSeverity, string> = {
-  critical: "border-red-700 bg-red-50 text-red-900",
-  warning: "border-amber-500 bg-amber-50 text-amber-900",
-  info: "border-blue-600 bg-blue-50 text-blue-900",
+  critical: "border-critical bg-critical-soft text-ink",
+  warning: "border-warning bg-warning-soft text-ink",
+  info: "border-info bg-info-soft text-ink",
 };
 
 /** Where to look at what the alert is about. */

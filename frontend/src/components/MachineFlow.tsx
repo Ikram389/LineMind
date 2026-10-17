@@ -1,5 +1,4 @@
 import { ChevronRight } from "lucide-react";
-import { Fragment } from "react";
 
 import type { Incident, MachineStatus } from "../api/types.ts";
 import { MachineCard } from "./MachineCard.tsx";
@@ -26,25 +25,22 @@ export function MachineFlow({
   const ordered = [...machines].sort((a, b) => a.position - b.position);
 
   return (
-    <ol className="grid grid-cols-[repeat(3,minmax(0,1fr))] items-stretch gap-3 xl:flex xl:gap-1">
+    <ol className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-5">
       {ordered.map((machine, index) => (
-        <Fragment key={machine.id}>
-          <li className="xl:flex-1">
-            <MachineCard
-              machine={machine}
-              staleAfterSeconds={staleAfterSeconds}
-              nowMs={nowMs}
-              shiftStart={shiftStart}
-              isFirstStop={firstStops.has(machine.id)}
-              href={machineHref(machine)}
-            />
-          </li>
+        <li key={machine.id} className="relative min-w-0">
+          <MachineCard
+            machine={machine}
+            staleAfterSeconds={staleAfterSeconds}
+            nowMs={nowMs}
+            shiftStart={shiftStart}
+            isFirstStop={firstStops.has(machine.id)}
+            href={machineHref(machine)}
+          />
+          {/* Line flow: the next machine is to the right. */}
           {index < ordered.length - 1 && (
-            <li aria-hidden className="hidden items-center text-gray-400 xl:flex">
-              <ChevronRight className="h-8 w-8" />
-            </li>
+            <ChevronRight aria-hidden className="absolute -right-[1.1rem] top-1/2 h-5 w-5 -translate-y-1/2 text-ink-muted" />
           )}
-        </Fragment>
+        </li>
       ))}
     </ol>
   );

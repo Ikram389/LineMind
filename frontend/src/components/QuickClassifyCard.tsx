@@ -6,6 +6,7 @@ import { t } from "../i18n/t.ts";
 import type { ClassifyTarget } from "../lib/classifyTarget.ts";
 import { formatDuration } from "../lib/time.ts";
 import { useClassify } from "../lib/useClassify.ts";
+import { buttonClass } from "./ui/buttonClass.ts";
 
 interface QuickClassifyCardProps {
   event: ClassifyTarget;
@@ -37,13 +38,13 @@ export function QuickClassifyCard({ event, onMore, onDone, onLater, buttons = 4 
   }
 
   return (
-    <article className="flex flex-col gap-3 rounded-xl border-4 border-amber-500 bg-white p-4 shadow-lg">
+    <article className="flex flex-col gap-4 rounded-card border-2 border-l-8 border-warning bg-surface p-4 shadow-lg sm:p-6">
       {event.role_in_incident === "secondary_breakdown" && (
-        <p className="text-base font-semibold uppercase text-amber-800">{t("prompt.secondary")}</p>
+        <p className="text-small font-semibold uppercase text-warning">{t("prompt.secondary")}</p>
       )}
-      <p className="text-2xl font-bold text-gray-900">
+      <p className="text-title font-bold text-ink">
         {t("prompt.question", { machine: event.machine.name })}{" "}
-        <span className="font-normal text-gray-700">
+        <span className="font-normal text-ink-muted">
           (
           {event.alarm_code
             ? t("prompt.detailsAlarm", { duration, code: event.alarm_code })
@@ -58,7 +59,7 @@ export function QuickClassifyCard({ event, onMore, onDone, onLater, buttons = 4 
             type="button"
             disabled={classify.isPending}
             onClick={() => void choose(reason.id, reason.name)}
-            className="min-h-16 rounded-lg bg-blue-700 px-5 py-3 text-xl font-semibold text-white disabled:opacity-60"
+            className={buttonClass("primary", "lg")}
           >
             {reason.name}
           </button>
@@ -66,7 +67,7 @@ export function QuickClassifyCard({ event, onMore, onDone, onLater, buttons = 4 
         <button
           type="button"
           onClick={onMore}
-          className="min-h-16 rounded-lg border-2 border-blue-700 px-5 py-3 text-xl font-semibold text-blue-800"
+          className={buttonClass("secondary", "lg")}
         >
           {t("prompt.more")}
         </button>
@@ -74,14 +75,14 @@ export function QuickClassifyCard({ event, onMore, onDone, onLater, buttons = 4 
           <button
             type="button"
             onClick={onLater}
-            className="ml-auto min-h-16 rounded-lg px-5 py-3 text-xl text-gray-700 underline"
+            className={buttonClass("ghost", "lg", "ml-auto underline")}
           >
             {t("prompt.later")}
           </button>
         )}
       </div>
       {error && (
-        <p role="alert" className="text-lg text-red-700">
+        <p role="alert" className="text-body font-semibold text-critical">
           {t("classify.failed")}
         </p>
       )}

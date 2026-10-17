@@ -18,10 +18,8 @@ const tab = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-gray-900 text-white" : "bg-white text-gray-800 hover:bg-gray-200"
   }`;
 
-/** Overview · Downtime · Quality · Reasons and Quality setup (managers), plus the
- * "stops needing a reason" badge. */
-export function LineNav({ lineId, shift }: LineNavProps) {
-  const { canManageReasons, canManageQuality } = usePermissions();
+/** "Unclassified N": a link to the stops of this shift that still need a reason. */
+export function UnclassifiedBadge({ lineId, shift }: LineNavProps) {
   const unclassified = useQuery({
     queryKey: [...queryKeys.unclassified(lineId), shift?.start],
     queryFn: () => countUnclassified(lineId, shift as CurrentShift),
@@ -29,6 +27,24 @@ export function LineNav({ lineId, shift }: LineNavProps) {
     refetchInterval: 60_000,
   });
   const count = unclassified.data ?? 0;
+  if (count === 0) return null;
+  return (
+    <NavLink
+      to={`/lines/${lineId}/unclassified`}
+      data-testid="unclassified-badge"
+      aria-label={t("nav.unclassifiedLabel", { count })}
+      className="inline-flex min-h-11 items-center gap-2 rounded-full border border-warning bg-warning-soft px-4 text-body font-bold text-warning"
+    >
+      <CircleAlert aria-hidden className="h-5 w-5" />
+      {t("nav.unclassified", { count })}
+    </NavLink>
+  );
+}
+
+/** Overview · Downtime · Quality · Reasons and Quality setup (managers), plus the
+ * "stops needing a reason" badge. */
+export function LineNav({ lineId, shift }: LineNavProps) {
+  const { canManageReasons, canManageQuality } = usePermissions();
 
   return (
     <nav className="flex flex-wrap items-center gap-2" aria-label="Line pages">
@@ -51,17 +67,9 @@ export function LineNav({ lineId, shift }: LineNavProps) {
           {t("nav.qualitySetup")}
         </NavLink>
       )}
-      {count > 0 && (
-        <NavLink
-          to={`/lines/${lineId}/unclassified`}
-          data-testid="unclassified-badge"
-          aria-label={t("nav.unclassifiedLabel", { count })}
-          className="ml-auto inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-3 text-xl font-bold text-gray-900"
-        >
-          <CircleAlert aria-hidden className="h-6 w-6" />
-          {t("nav.unclassified", { count })}
-        </NavLink>
-      )}
+      <span className="ml-auto">
+        <UnclassifiedBadge lineId={lineId} shift={shift} />
+      </span>
     </nav>
   );
 }

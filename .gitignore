@@ -21,3 +21,7 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# UI screenshots (large; kept locally, not in git)
+e2e/screenshots/
+e2e/test-results/

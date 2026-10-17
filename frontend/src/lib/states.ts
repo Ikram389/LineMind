@@ -1,72 +1,40 @@
-import {
-  Ban,
-  CircleHelp,
-  Hourglass,
-  type LucideIcon,
-  OctagonX,
-  Pause,
-  Play,
-} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import type { MachineState, MachineStatus } from "../api/types.ts";
+import { STATUS } from "../components/ui/status.ts";
 import type { MessageKey } from "../i18n/en.ts";
 
 export interface StateStyle {
   label: MessageKey;
   Icon: LucideIcon;
-  /** Card background and border. */
-  card: string;
+  /** Border colour (design token). */
+  border: string;
+  /** Soft background tint. */
+  soft: string;
   /** Text colour of the state label. */
   text: string;
   /** Solid colour for timeline segments. */
   solid: string;
 }
 
-// Colour is never the only signal: every state also has its own icon and written label.
-export const STATE_STYLES: Record<MachineState, StateStyle> = {
-  running: {
-    label: "state.running",
-    Icon: Play,
-    card: "bg-green-50 border-green-600",
-    text: "text-green-800",
-    solid: "bg-green-500",
-  },
-  stopped: {
-    label: "state.stopped",
-    Icon: OctagonX,
-    card: "bg-red-50 border-red-600",
-    text: "text-red-800",
-    solid: "bg-red-600",
-  },
-  blocked: {
-    label: "state.blocked",
-    Icon: Ban,
-    card: "bg-amber-50 border-amber-500",
-    text: "text-amber-900",
-    solid: "bg-amber-500",
-  },
-  starved: {
-    label: "state.starved",
-    Icon: Hourglass,
-    card: "bg-amber-50 border-amber-500",
-    text: "text-amber-900",
-    solid: "bg-amber-300",
-  },
-  planned_stop: {
-    label: "state.planned_stop",
-    Icon: Pause,
-    card: "bg-blue-50 border-blue-600",
-    text: "text-blue-800",
-    solid: "bg-blue-500",
-  },
-  unknown: {
-    label: "state.unknown",
-    Icon: CircleHelp,
-    card: "bg-gray-100 border-gray-400",
-    text: "text-gray-700",
-    solid: "bg-gray-400",
-  },
+const TOKENS: Record<MachineState, { border: string; soft: string; text: string; solid: string }> = {
+  running: { border: "border-running", soft: "bg-running-soft", text: "text-running", solid: "bg-running" },
+  stopped: { border: "border-stopped", soft: "bg-stopped-soft", text: "text-stopped", solid: "bg-stopped" },
+  blocked: { border: "border-blocked", soft: "bg-blocked-soft", text: "text-blocked", solid: "bg-blocked" },
+  // Starved shares the amber family; its lighter segment, icon and text tell it apart.
+  starved: { border: "border-blocked", soft: "bg-blocked-soft", text: "text-blocked", solid: "bg-blocked/55" },
+  planned_stop: { border: "border-planned", soft: "bg-planned-soft", text: "text-planned", solid: "bg-planned" },
+  unknown: { border: "border-unknown border-dashed", soft: "bg-unknown-soft", text: "text-unknown", solid: "bg-unknown" },
 };
+
+// Colour is never the only signal: every state also has its own icon and written label
+// (the same ones as StatusBadge).
+export const STATE_STYLES = Object.fromEntries(
+  (Object.keys(TOKENS) as MachineState[]).map((state) => [
+    state,
+    { label: STATUS[state].label, Icon: STATUS[state].Icon, ...TOKENS[state] },
+  ]),
+) as Record<MachineState, StateStyle>;
 
 export interface EffectiveState {
   state: MachineState;

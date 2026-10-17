@@ -1,0 +1,155 @@
+/*
+ * LineMind design tokens (one place). Light theme on :root, dark theme on .dark.
+ * Components use the Tailwind utilities generated from @theme below, e.g.
+ * bg-surface, text-ink, text-ink-muted, border-line, bg-accent, bg-running-soft, text-stopped.
+ * Never use raw palette colours (bg-gray-100, text-red-700, #hex) in components.
+ */
+/* Dark mode follows the .dark class on <html> (Settings, TV mode), not the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  /* Neutrals */
+  --lm-canvas: #f6f7f9;
+  --lm-surface: #ffffff;
+  --lm-surface-muted: #f1f3f5;
+  --lm-line: #e2e5ea;
+  --lm-line-strong: #cbd0d8;
+  --lm-ink: #111827;
+  --lm-ink-muted: #4b5563;
+  --lm-chrome: #ffffff; /* sidebar and top bar */
+  /* The one accent: primary actions, links, focus */
+  --lm-accent: #1d4ed8;
+  --lm-accent-hover: #1e40af;
+  --lm-accent-soft: #dbeafe;
+  --lm-on-accent: #ffffff;
+  /* Meaning: machine states */
+  --lm-running: #15803d;
+  --lm-running-soft: #dcfce7;
+  --lm-stopped: #b91c1c;
+  --lm-stopped-soft: #fee2e2;
+  --lm-blocked: #b45309;
+  --lm-blocked-soft: #fef3c7;
+  --lm-planned: #6d28d9;
+  --lm-planned-soft: #ede9fe;
+  --lm-unknown: #4b5563;
+  --lm-unknown-soft: #e5e7eb;
+  /* Meaning: severities */
+  --lm-info: #0369a1;
+  --lm-info-soft: #e0f2fe;
+  --lm-warning: #b45309;
+  --lm-warning-soft: #fef3c7;
+  --lm-critical: #b91c1c;
+  --lm-critical-soft: #fee2e2;
+}
+
+.dark {
+  color-scheme: dark;
+  --lm-canvas: #0b0f14;
+  --lm-surface: #131a22;
+  --lm-surface-muted: #1b2430;
+  --lm-line: #2a3441;
+  --lm-line-strong: #3b4655;
+  --lm-ink: #f3f4f6;
+  --lm-ink-muted: #a7b0bd;
+  --lm-chrome: #0f151c;
+  --lm-accent: #60a5fa;
+  --lm-accent-hover: #93c5fd;
+  --lm-accent-soft: #172554;
+  --lm-on-accent: #0b0f14;
+  --lm-running: #4ade80;
+  --lm-running-soft: #0f2a1a;
+  --lm-stopped: #f87171;
+  --lm-stopped-soft: #2d1215;
+  --lm-blocked: #fbbf24;
+  --lm-blocked-soft: #2a2010;
+  --lm-planned: #a78bfa;
+  --lm-planned-soft: #1f1733;
+  --lm-unknown: #9ca3af;
+  --lm-unknown-soft: #1f2937;
+  --lm-info: #38bdf8;
+  --lm-info-soft: #0c2533;
+  --lm-warning: #fbbf24;
+  --lm-warning-soft: #2a2010;
+  --lm-critical: #f87171;
+  --lm-critical-soft: #2d1215;
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-canvas: var(--lm-canvas);
+  --color-surface: var(--lm-surface);
+  --color-surface-muted: var(--lm-surface-muted);
+  --color-line: var(--lm-line);
+  --color-line-strong: var(--lm-line-strong);
+  --color-ink: var(--lm-ink);
+  --color-ink-muted: var(--lm-ink-muted);
+  --color-chrome: var(--lm-chrome);
+  --color-accent: var(--lm-accent);
+  --color-accent-hover: var(--lm-accent-hover);
+  --color-accent-soft: var(--lm-accent-soft);
+  --color-on-accent: var(--lm-on-accent);
+  --color-running: var(--lm-running);
+  --color-running-soft: var(--lm-running-soft);
+  --color-stopped: var(--lm-stopped);
+  --color-stopped-soft: var(--lm-stopped-soft);
+  --color-blocked: var(--lm-blocked);
+  --color-blocked-soft: var(--lm-blocked-soft);
+  --color-planned: var(--lm-planned);
+  --color-planned-soft: var(--lm-planned-soft);
+  --color-unknown: var(--lm-unknown);
+  --color-unknown-soft: var(--lm-unknown-soft);
+  --color-info: var(--lm-info);
+  --color-info-soft: var(--lm-info-soft);
+  --color-warning: var(--lm-warning);
+  --color-warning-soft: var(--lm-warning-soft);
+  --color-critical: var(--lm-critical);
+  --color-critical-soft: var(--lm-critical-soft);
+  /* Effectiveness and trends reuse the state colours. */
+  --color-improved: var(--lm-running);
+  --color-worse: var(--lm-stopped);
+
+  /* Type scale: 12 · 14 · 16 · 20 · 24 · 32 · 48 (TV mode scales the root ×1.5). */
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-small: 0.875rem;
+  --text-small--line-height: 1.25rem;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5rem;
+  --text-title: 1.25rem;
+  --text-title--line-height: 1.75rem;
+  --text-page: 1.5rem;
+  --text-page--line-height: 2rem;
+  --text-stat: 2rem;
+  --text-stat--line-height: 2.5rem;
+  --text-hero: 3rem;
+  --text-hero--line-height: 3.25rem;
+
+  --radius-control: 0.5rem;
+  --radius-card: 0.75rem;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* TV mode: everything ×1.5 (all sizes are in rem). */
+  html.tv {
+    font-size: 24px;
+  }
+  body {
+    margin: 0;
+    background: var(--lm-canvas);
+    color: var(--lm-ink);
+    font-variant-numeric: tabular-nums;
+  }
+  /* One visible focus ring everywhere (keyboard only). */
+  :focus-visible {
+    outline: 3px solid var(--lm-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}

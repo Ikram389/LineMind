@@ -8,6 +8,7 @@ import { queryKeys } from "../../api/queryKeys.ts";
 import { t } from "../../i18n/t.ts";
 import { alertMessage, SEVERITY_STYLE } from "../../lib/alertText.ts";
 import { formatTime } from "../../lib/time.ts";
+import { buttonClass } from "../ui/buttonClass.ts";
 
 const REFRESH_MS = 60_000; // a safety net: the user socket keeps the count live
 
@@ -36,13 +37,13 @@ export function NotificationBell() {
         aria-label={t("bell.label", { count })}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="relative rounded-lg p-2 hover:bg-gray-800"
+        className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-control text-ink hover:bg-surface-muted"
       >
-        <Bell aria-hidden className="h-8 w-8" />
+        <Bell aria-hidden className="h-6 w-6" />
         {count > 0 && (
           <span
             data-testid="bell-count"
-            className="absolute -right-1 -top-1 min-w-7 rounded-full bg-red-600 px-2 text-center text-base font-bold"
+            className="absolute right-0 top-0 min-w-5 rounded-full bg-critical px-1 text-center text-caption font-bold text-surface"
           >
             {count}
           </span>
@@ -52,9 +53,9 @@ export function NotificationBell() {
         <div
           role="dialog"
           aria-label={t("bell.title")}
-          className="absolute right-0 z-50 mt-2 w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-white p-3 text-gray-900 shadow-2xl"
+          className="absolute right-0 z-50 mt-2 w-[min(28rem,calc(100vw-2rem))] rounded-card border border-line bg-surface p-3 text-ink shadow-lg"
         >
-          {latest.data && latest.data.results.length === 0 && <p className="p-2 text-lg">{t("bell.empty")}</p>}
+          {latest.data && latest.data.results.length === 0 && <p className="p-2 text-body text-ink-muted">{t("bell.empty")}</p>}
           <ul className="flex flex-col gap-2">
             {(latest.data?.results ?? []).map((n) => (
               <li key={n.id}>
@@ -64,10 +65,10 @@ export function NotificationBell() {
                     if (!n.read_at) readOne.mutate(n.id);
                     setOpen(false);
                   }}
-                  className={`block rounded-lg border-l-4 p-2 ${SEVERITY_STYLE[n.severity]} ${n.read_at ? "opacity-70" : "font-semibold"}`}
+                  className={`block rounded-control border-l-4 p-2 ${SEVERITY_STYLE[n.severity]} ${n.read_at ? "opacity-70" : "font-semibold"}`}
                 >
-                  <span className="block text-lg">{alertMessage(n.message_key, n.message_values)}</span>
-                  <span className="text-base">
+                  <span className="block text-body">{alertMessage(n.message_key, n.message_values)}</span>
+                  <span className="text-small text-ink-muted">
                     {n.alert?.line?.name ?? String(n.message_values.line ?? "")} ·{" "}
                     {formatTime(n.created_at, n.alert?.factory_timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)}
                     {n.reason === "escalated" && ` · ${t("bell.escalated")}`}
@@ -81,11 +82,11 @@ export function NotificationBell() {
               type="button"
               onClick={() => readAll.mutate()}
               disabled={count === 0}
-              className="min-h-11 rounded-lg border border-gray-400 px-3 text-lg disabled:opacity-40"
+              className={buttonClass("secondary")}
             >
               {t("bell.markAll")}
             </button>
-            <Link to="/alerts" onClick={() => setOpen(false)} className="min-h-11 rounded-lg bg-gray-900 px-3 py-2 text-lg text-white">
+            <Link to="/alerts" onClick={() => setOpen(false)} className={buttonClass("primary")}>
               {t("bell.all")}
             </Link>
           </div>

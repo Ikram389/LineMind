@@ -1,20 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
 import { TriangleAlert, Wrench } from "lucide-react";
-import { Link, NavLink, Outlet } from "react-router";
+import { type ReactNode, useEffect, useState } from "react";
+import { Link, Outlet, useSearchParams } from "react-router";
 
 import { getHealth, listAlerts } from "../api/alerts.ts";
 import { getMyOpenCount } from "../api/maintenance.ts";
 import { queryKeys } from "../api/queryKeys.ts";
-import { useAuth } from "../auth/context.ts";
 import { t } from "../i18n/t.ts";
+import { mediaMatches, useCurrentLine } from "../lib/currentLine.ts";
 import { usePermissions } from "../lib/permissions.ts";
+import { useAuth } from "../auth/context.ts";
+import { applyTheme, readTheme, useTheme } from "../lib/theme.ts";
 import { useUserLive } from "../live/useUserLive.ts";
 import { NotificationBell } from "./alerts/NotificationBell.tsx";
+import { Sidebar } from "./shell/Sidebar.tsx";
+import { LineSelector, UserMenu } from "./shell/TopBarParts.tsx";
 
 const HEALTH_REFRESH_MS = 60_000;
-
-const link = ({ isActive }: { isActive: boolean }) =>
-  `rounded-lg px-3 py-2 text-lg font-semibold ${isActive ? "bg-white text-gray-900" : "hover:bg-gray-800"}`;
+/** Below this width (tablets, small laptops) the sidebar starts collapsed. */
+const NARROW = "(max-width: 1365px)";
 
 function formatLocalTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -27,79 +31,117 @@ export function AlertEngineWarning() {
   if (health.data?.alerts !== "stale") return null;
   const last = health.data.alerts_last_heartbeat;
   return (
-    <p role="alert" data-testid="engine-stale" className="flex items-center gap-2 bg-red-700 px-4 py-2 text-lg font-semibold text-white">
-      <TriangleAlert aria-hidden className="h-6 w-6 shrink-0" />
+    <p
+      role="alert"
+      data-testid="engine-stale"
+      className="flex items-center gap-2 border-b border-critical bg-critical-soft px-6 py-2 text-body font-semibold text-critical"
+    >
+      <TriangleAlert aria-hidden className="h-5 w-5 shrink-0" />
       {last ? t("appbar.engineStale", { time: formatLocalTime(last) }) : t("appbar.engineNever")}
     </p>
   );
 }
 
-/** The bar on every signed-in page: navigation, open alerts, the bell, settings, log out. */
-export function AppBar() {
-  const { logout } = useAuth();
-  const { canResolveAlerts, canManageAlertRules } = usePermissions();
+/** Starts collapsed on narrow screens; the user's toggle wins until the width class changes. */
+function useSidebarCollapsed(): [boolean, () => void] {
+  const [narrow, setNarrow] = useState(() => mediaMatches(NARROW));
+  const [override, setOverride] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(NARROW);
+    const onChange = () => {
+      setNarrow(query.matches);
+      setOverride(null);
+    };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+  const collapsed = override ?? narrow;
+  return [collapsed, () => setOverride(!collapsed)];
+}
+
+/** The frame of every signed-in page: the left menu, the top bar (line, my actions, bell,
+ * account) and the alert engine warning, around the page itself. */
+export function AppBar({ children }: { children?: ReactNode }) {
+  const { canResolveAlerts } = usePermissions();
+  const { lineId, subPage } = useCurrentLine();
+  const [collapsed, toggle] = useSidebarCollapsed();
   useUserLive(true);
   const open = useQuery({
     queryKey: queryKeys.alertList({ status: "unresolved", limit: 1 }),
     queryFn: () => listAlerts({ status: "unresolved", limit: 1 }),
     refetchInterval: HEALTH_REFRESH_MS,
   });
-  const openCount = open.data?.count ?? 0;
   const mine = useQuery({ queryKey: queryKeys.myOpenActions, queryFn: getMyOpenCount, refetchInterval: HEALTH_REFRESH_MS });
   const myCount = mine.data ?? 0;
 
   return (
-    <>
-      <nav aria-label="Main" className="flex flex-wrap items-center gap-2 bg-gray-900 px-4 py-2 text-white">
-        <Link to="/" className="mr-2 text-2xl font-extrabold">
-          {t("appbar.home")}
-        </Link>
-        <NavLink to="/" end className={link}>
-          {t("appbar.lines")}
-        </NavLink>
-        <NavLink to="/alerts" className={link}>
-          {openCount > 0 ? t("appbar.openAlerts", { count: openCount }) : t("appbar.alerts")}
-        </NavLink>
-        <NavLink to="/maintenance" className={link}>
-          {t("appbar.maintenance")}
-        </NavLink>
-        {canManageAlertRules && (
-          <NavLink to="/alert-rules" className={link}>
-            {t("appbar.rules")}
-          </NavLink>
-        )}
-        <div className="ml-auto flex items-center gap-2">
-          {myCount > 0 && (
-            <Link
-              to="/maintenance?mine=true"
-              aria-label={t("appbar.myActions", { count: myCount })}
-              data-testid="my-actions-badge"
-              className="inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-lg font-bold text-gray-900"
-            >
-              <Wrench aria-hidden className="h-5 w-5" />
-              {myCount}
-            </Link>
-          )}
-          <NotificationBell />
-          <NavLink to="/settings" className={link}>
-            {t("appbar.settings")}
-          </NavLink>
-          <button type="button" onClick={logout} className="rounded-md border border-gray-500 px-3 py-2 text-lg hover:bg-gray-800">
-            {t("nav.logout")}
-          </button>
+    <div className="flex min-h-screen bg-canvas text-ink">
+      <a
+        href="#content"
+        className="sr-only z-50 rounded-control bg-accent px-4 py-2 text-on-accent focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+      >
+        {t("shell.skip")}
+      </a>
+      <Sidebar lineId={lineId} collapsed={collapsed} onToggle={toggle} openAlerts={open.data?.count ?? 0} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-chrome px-4 sm:px-6">
+          <LineSelector lineId={lineId} subPage={subPage} />
+          <div className="ml-auto flex items-center gap-1">
+            {myCount > 0 && (
+              <Link
+                to="/maintenance?mine=true"
+                aria-label={t("appbar.myActions", { count: myCount })}
+                data-testid="my-actions-badge"
+                className="inline-flex min-h-11 items-center gap-1 rounded-full bg-warning-soft px-3 text-body font-bold text-warning hover:bg-surface-muted"
+              >
+                <Wrench aria-hidden className="h-5 w-5" />
+                {myCount}
+              </Link>
+            )}
+            <NotificationBell />
+            <UserMenu />
+          </div>
+        </header>
+        {canResolveAlerts && <AlertEngineWarning />}
+        <div id="content" className="flex min-w-0 flex-1 flex-col">
+          {children}
         </div>
-      </nav>
-      {canResolveAlerts && <AlertEngineWarning />}
-    </>
+      </div>
+    </div>
   );
 }
 
-/** Layout route: the bar above every signed-in page. */
+/** TV mode (?tv=1): no menus, dark, everything larger. Leaving it restores the user's theme. */
+function useTvMode(tv: boolean, userId: number | undefined) {
+  useEffect(() => {
+    if (!tv) return;
+    const root = document.documentElement;
+    root.classList.add("tv");
+    applyTheme("dark");
+    return () => {
+      root.classList.remove("tv");
+      applyTheme(readTheme(userId));
+    };
+  }, [tv, userId]);
+}
+
+/** Layout route: the frame around every signed-in page, or nothing at all in TV mode. */
 export function AppLayout() {
+  useTheme(); // applies the user's theme
+  const userId = useAuth().user?.id;
+  const tv = useSearchParams()[0].get("tv") === "1";
+  useTvMode(tv, userId);
+  if (tv) {
+    return (
+      <div data-testid="tv-mode" className="min-h-screen bg-canvas text-ink">
+        <Outlet />
+      </div>
+    );
+  }
   return (
-    <>
-      <AppBar />
+    <AppBar>
       <Outlet />
-    </>
+    </AppBar>
   );
 }

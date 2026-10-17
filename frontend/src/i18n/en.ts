@@ -659,6 +659,38 @@ export const en = {
   "reasonCategory.quality": "Quality",
   "reasonCategory.organizational": "Organizational",
   "reasonCategory.planned": "Planned",
+
+  "ui.filters": "Filters",
+  "ui.moreFilters": "More filters",
+  "ui.fewerFilters": "Fewer filters",
+  "ui.ok": "OK",
+  "ui.close": "Close",
+  "ui.pages": "Pages",
+
+  "shell.nav": "Main",
+  "shell.manage": "Manage",
+  "shell.collapse": "Collapse the menu",
+  "shell.expand": "Expand the menu",
+  "shell.line": "Line",
+  "shell.chooseLine": "Choose a line",
+  "shell.userMenu": "Account menu for {email}",
+  "shell.skip": "Skip to content",
+
+  "theme.title": "Appearance",
+  "theme.label": "Theme",
+  "theme.light": "Light",
+  "theme.dark": "Dark",
+  "theme.note": "Remembered for you in this browser.",
+
+  "tv.open": "TV mode",
+  "tv.exit": "Exit TV mode",
+
+  "overview.machines": "Machines",
+  "oee.chartLabel": "Hourly OEE chart",
+  "overview.shiftNow": "Current shift",
+
+  "dev.title": "Design system",
+  "dev.subtitle": "Every shared component, in both themes (development only).",
 } as const;
 
 export type MessageKey = keyof typeof en;

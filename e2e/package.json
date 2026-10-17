@@ -1,0 +1,13 @@
+{
+  "name": "linemind-e2e",
+  "private": true,
+  "description": "Screenshots and accessibility checks of the running app (Playwright). Runs in the e2e Compose service.",
+  "scripts": {
+    "screenshots": "playwright test tests/screenshots.spec.ts",
+    "a11y": "playwright test tests/a11y.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "@axe-core/playwright": "4.10.1"
+  }
+}

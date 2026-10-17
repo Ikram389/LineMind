@@ -7,6 +7,7 @@ import type { CurrentShift } from "../../api/types.ts";
 import { t } from "../../i18n/t.ts";
 import { formatCount, formatRate } from "../../lib/qualityFormat.ts";
 import { Panel } from "../Panel.tsx";
+import { buttonClass } from "../ui/buttonClass.ts";
 
 const REFRESH_MS = 60_000; // a safety net: quality_updated messages are throttled
 
@@ -30,29 +31,29 @@ export function QualityCard({ lineId, shift }: { lineId: number; shift: CurrentS
     >
       {data && (
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <dl className="grid grid-cols-3 gap-4">
+          <dl className="grid grid-cols-3 gap-6">
             <div>
-              <dt className="text-lg text-gray-600">{t("qcard.rate")}</dt>
-              <dd className="text-4xl font-extrabold tabular-nums" data-testid="qcard-rate">
+              <dt className="text-small font-semibold text-ink-muted">{t("qcard.rate")}</dt>
+              <dd className="text-stat font-bold tabular-nums text-ink" data-testid="qcard-rate">
                 {formatRate(data.defect_rate)}
               </dd>
             </div>
             <div>
-              <dt className="text-lg text-gray-600">{t("qcard.defects")}</dt>
-              <dd className="text-4xl font-extrabold tabular-nums" data-testid="qcard-defects">
+              <dt className="text-small font-semibold text-ink-muted">{t("qcard.defects")}</dt>
+              <dd className="text-stat font-bold tabular-nums text-ink" data-testid="qcard-defects">
                 {formatCount(data.defects)}
               </dd>
             </div>
             <div>
-              <dt className="text-lg text-gray-600">{t("qcard.unreviewed")}</dt>
-              <dd className="text-4xl font-extrabold tabular-nums" data-testid="qcard-unreviewed">
+              <dt className="text-small font-semibold text-ink-muted">{t("qcard.unreviewed")}</dt>
+              <dd className="text-stat font-bold tabular-nums text-ink" data-testid="qcard-unreviewed">
                 {formatCount(data.unreviewed)}
               </dd>
             </div>
           </dl>
           <Link
             to={`/lines/${lineId}/quality`}
-            className="min-h-12 rounded-lg bg-gray-900 px-4 py-3 text-lg font-semibold text-white"
+            className={buttonClass("secondary")}
           >
             {t("qcard.open")}
           </Link>
