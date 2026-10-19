@@ -82,3 +82,15 @@ describe("DowntimePage", () => {
     expect(screen.getByRole("button", { name: "Classify 1 selected" })).toBeInTheDocument();
   });
 });
+
+describe("DowntimePage links", () => {
+  it("opens the line stop given by ?incident= (the assistant's source links)", async () => {
+    const getIncident = vi.spyOn(downtime, "getIncident").mockReturnValue(new Promise(() => {}));
+    renderWithProviders(<DowntimePage />, {
+      route: "/lines/1/downtime?start=2026-10-13T05:00:00Z&end=2026-10-13T13:00:00Z&incident=14",
+      path: "/lines/:lineId/downtime",
+    });
+    await waitFor(() => expect(getIncident).toHaveBeenCalledWith(14));
+    expect(screen.getByTestId("ask-assistant")).toBeInTheDocument();
+  });
+});

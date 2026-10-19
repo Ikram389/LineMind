@@ -20,6 +20,7 @@ const PAGES: { name: string; path: string }[] = [
   { name: "alerts", path: "/alerts" },
   { name: "maintenance", path: "/maintenance" },
   { name: "settings", path: "/settings" },
+  { name: "assistant", path: "/assistant" },
 ];
 
 async function login(page: Page): Promise<void> {

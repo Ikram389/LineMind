@@ -114,6 +114,11 @@ export async function apiDownload(path: string): Promise<Blob> {
   return response.blob();
 }
 
+/** A request whose body is read as a stream (server-sent events); same auth and refresh. */
+export async function apiStream(path: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
+  return authorizedRequest(path, { ...init, signal }, true);
+}
+
 /** For tests. */
 export function resetClientState(): void {
   accessToken = null;

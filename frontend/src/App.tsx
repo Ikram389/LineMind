@@ -7,6 +7,7 @@ import { RequireAuth } from "./auth/RequireAuth.tsx";
 import { AppLayout } from "./components/AppBar.tsx";
 import { AlertRulesPage } from "./pages/AlertRulesPage.tsx";
 import { AlertsPage } from "./pages/AlertsPage.tsx";
+import { AssistantPage } from "./pages/AssistantPage.tsx";
 import { DowntimePage } from "./pages/DowntimePage.tsx";
 import { LineOverviewPage } from "./pages/LineOverviewPage.tsx";
 import { LinePickerPage } from "./pages/LinePickerPage.tsx";
@@ -46,6 +47,7 @@ export default function App() {
             >
               <Route path="/" element={<LinePickerPage />} />
               <Route path="/alerts" element={<AlertsPage />} />
+              <Route path="/assistant" element={<AssistantPage />} />
               <Route path="/alert-rules" element={<AlertRulesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/maintenance" element={<MaintenancePage />} />

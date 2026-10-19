@@ -11,6 +11,8 @@ channels-redis>=4.2,<5.0
 redis>=5.0,<7.0
 # Background jobs: alert evaluation every 30 s (beat), event-driven evaluation and emails
 celery[redis]>=5.4,<6.0
+# AI assistant: calls an OpenAI-compatible model server (Groq now, a local server later)
+httpx>=0.27,<1.0
 
 # Development tools
 pytest>=8.3,<9.0

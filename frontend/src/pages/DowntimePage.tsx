@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 
 import type { AnalysedDowntimeEvent } from "../api/analysisTypes.ts";
 import {
@@ -22,6 +22,7 @@ import { IncidentDrawer } from "../components/downtime/IncidentDrawer.tsx";
 import { ParetoPanel } from "../components/downtime/ParetoPanel.tsx";
 import { RecurringPanel } from "../components/downtime/RecurringPanel.tsx";
 import { SummaryCards } from "../components/downtime/SummaryCards.tsx";
+import { AskAssistantButton } from "../components/assistant/AssistantPanel.tsx";
 import { LineNav } from "../components/LineNav.tsx";
 import { Panel } from "../components/Panel.tsx";
 import { t } from "../i18n/t.ts";
@@ -49,7 +50,7 @@ function groupFilter(key: string, reasonCodes: Map<number, string>): Partial<Dow
 
 export function DowntimePage() {
   const lineId = Number(useParams().lineId);
-  const { factory, shift } = useLineContext(lineId);
+  const { line, factory, shift } = useLineContext(lineId);
   const [filters, setFilters] = useDowntimeFilters();
   const permissions = usePermissions();
   const zone = factory.data?.timezone ?? "UTC";
@@ -58,7 +59,20 @@ export function DowntimePage() {
   const [ordering, setOrdering] = useState("-started_at");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [classifying, setClassifying] = useState<ClassifyTarget[] | null>(null);
-  const [drawer, setDrawer] = useState<number | null>(null);
+  // ?incident=<id> opens that line stop (links from the assistant's sources).
+  const [params, setParams] = useSearchParams();
+  const [drawer, setDrawer] = useState<number | null>(() => {
+    const id = Number(params.get("incident"));
+    return Number.isInteger(id) && id > 0 ? id : null;
+  });
+  function closeDrawer() {
+    setDrawer(null);
+    if (params.has("incident")) {
+      const next = new URLSearchParams(params);
+      next.delete("incident");
+      setParams(next, { replace: true });
+    }
+  }
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [exportError, setExportError] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -156,7 +170,16 @@ export function DowntimePage() {
     <main className="flex min-h-screen flex-col gap-4 bg-gray-100 p-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-3xl font-bold">{t("downtime.title")}</h1>
-        <p className="text-lg text-gray-600">{t("time.zone", { zone })}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-lg text-gray-600">{t("time.zone", { zone })}</p>
+          <AskAssistantButton
+            lineId={lineId}
+            lineName={line.data?.name ?? ""}
+            start={effective.start}
+            end={effective.end}
+            zone={zone}
+          />
+        </div>
       </header>
       <LineNav lineId={lineId} shift={shift.data} />
 
@@ -268,7 +291,7 @@ export function DowntimePage() {
           onSaved={() => setSelected(new Set())}
         />
       )}
-      {drawer !== null && <IncidentDrawer incidentId={drawer} zone={zone} onClose={() => setDrawer(null)} />}
+      {drawer !== null && <IncidentDrawer incidentId={drawer} zone={zone} onClose={closeDrawer} />}
     </main>
   );
 }

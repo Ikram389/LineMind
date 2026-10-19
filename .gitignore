@@ -25,3 +25,6 @@ Thumbs.db
 # UI screenshots (large; kept locally, not in git)
 e2e/screenshots/
 e2e/test-results/
+
+# Assistant evaluation reports (generated)
+backend/reports/

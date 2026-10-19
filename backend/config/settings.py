@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.maintenance",
     "apps.analytics",
     "apps.live",
+    "apps.assistant",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -170,4 +171,22 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+# --- AI production assistant (step 10c) --------------------------------------------------
+# Any OpenAI-compatible chat server with tool calling: Groq for development, a local server
+# (e.g. Ollama) in production. Switching provider = changing these variables only.
+ASSISTANT = {
+    "PROVIDER": os.environ.get("ASSISTANT_PROVIDER") or "openai_compatible",  # or "fake"
+    "BASE_URL": os.environ.get("ASSISTANT_BASE_URL", "").rstrip("/"),
+    "MODEL": os.environ.get("ASSISTANT_MODEL", ""),
+    "API_KEY": os.environ.get("ASSISTANT_API_KEY", ""),
+    "TEMPERATURE": float(os.environ.get("ASSISTANT_TEMPERATURE") or "0.1"),
+    "CONTEXT_TOKENS": int(os.environ.get("ASSISTANT_CONTEXT_TOKENS") or "8192"),
+    "TIMEOUT_SECONDS": int(os.environ.get("ASSISTANT_TIMEOUT_SECONDS") or "60"),
+    "MAX_CONCURRENT": int(os.environ.get("ASSISTANT_MAX_CONCURRENT") or "2"),
+    "MAX_TOOL_CALLS": int(os.environ.get("ASSISTANT_MAX_TOOL_CALLS") or "8"),
+    "DAILY_QUESTIONS": int(os.environ.get("ASSISTANT_DAILY_QUESTIONS") or "30"),
+    # Extra JSON merged into every chat request, e.g. {"reasoning_effort": "low"} for gpt-oss.
+    "EXTRA_PARAMS": os.environ.get("ASSISTANT_EXTRA_PARAMS", ""),
 }

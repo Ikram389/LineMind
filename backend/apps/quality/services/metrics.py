@@ -19,10 +19,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from django.db.models import Case, CharField, Count, F, IntegerField, Q, QuerySet, Value, When
 
-from apps.organizations.models import Machine, ProductionLine
+from apps.analytics.services.buckets import day_buckets, hour_buckets, shift_buckets
+from apps.organizations.models import Factory, Machine, ProductionLine
 from apps.production.models import Product
 from apps.production.services.counters import (
     Keep,
@@ -31,6 +33,7 @@ from apps.production.services.counters import (
     machine_counts_by_bucket,
 )
 from apps.production.services.orders import active_orders
+from apps.production.services.shifts import shift_periods
 from apps.quality.models import DefectType, InspectionResult, InspectionStation, Severity, Verdict
 
 GROUP_BY = ("defect_type", "station", "machine", "product")
@@ -336,6 +339,19 @@ def pareto(lines: Sequence[ProductionLine], f: QualityFilters, group_by: str) ->
 
 
 # --- Trend ----------------------------------------------------------------------------
+
+
+TREND_GROUP_BY = ("hour", "shift", "day")
+
+
+def trend_buckets(factory: Factory, start: datetime, end: datetime, group_by: str) -> list[Any]:
+    """Trend buckets in the factory's timezone (hours, days) or its shift occurrences."""
+    zone = ZoneInfo(factory.timezone)
+    if group_by == "hour":
+        return hour_buckets(start, end, zone)
+    if group_by == "day":
+        return day_buckets(start, end, zone)
+    return shift_buckets(start, end, shift_periods(factory, start, end))
 
 
 def trend(

@@ -17,7 +17,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.analytics.services.buckets import day_buckets, hour_buckets, shift_buckets
 from apps.audit.mixins import AuditedModelViewSetMixin, snapshot
 from apps.audit.services import record_audit
 from apps.downtime.filters import bool_query_param, choice_query_param
@@ -34,7 +33,6 @@ from apps.organizations.tenancy import (
     scope_to_user,
 )
 from apps.organizations.views import Conflict, integer_query_param
-from apps.production.services.shifts import shift_periods
 from apps.production.views import EventPagination
 from apps.quality.filters import ordering_param, quality_scope
 from apps.quality.models import DefectType, InspectionResult, InspectionStation
@@ -47,7 +45,15 @@ from apps.quality.serializers import (
 )
 from apps.quality.services.context import contexts_for
 from apps.quality.services.live import queue_quality_updates
-from apps.quality.services.metrics import GROUP_BY, pareto, select_results, summary, trend
+from apps.quality.services.metrics import (
+    GROUP_BY,
+    TREND_GROUP_BY,
+    pareto,
+    select_results,
+    summary,
+    trend,
+    trend_buckets,
+)
 from apps.quality.services.processing import reprocess_code, reprocess_machines
 from apps.quality.services.reviews import ReviewError, can_review, review_result
 
@@ -274,16 +280,8 @@ class QualityTrendView(QualityView):
 
     def get(self, request: Request) -> Response:
         lines, filters = quality_scope(request, require_line=True)
-        group_by = choice_query_param(request, "group_by", ["hour", "shift", "day"]) or "hour"
-        factory = lines[0].factory
-        zone = ZoneInfo(factory.timezone)
-        if group_by == "hour":
-            buckets = hour_buckets(filters.start, filters.end, zone)
-        elif group_by == "day":
-            buckets = day_buckets(filters.start, filters.end, zone)
-        else:
-            periods = shift_periods(factory, filters.start, filters.end)
-            buckets = shift_buckets(filters.start, filters.end, periods)
+        group_by = choice_query_param(request, "group_by", list(TREND_GROUP_BY)) or "hour"
+        buckets = trend_buckets(lines[0].factory, filters.start, filters.end, group_by)
         body = trend(lines, filters, buckets)
         body["group_by"] = group_by
         body["range"] = {"start": filters.start, "end": filters.end}

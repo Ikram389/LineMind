@@ -35,4 +35,8 @@ export const queryKeys = {
   maintenanceList: (params: unknown) => ["maintenance", "list", params] as const,
   maintenanceAction: (id: number) => ["maintenance", "action", id] as const,
   myOpenActions: ["maintenance", "mine"] as const,
+  /** The AI assistant. */
+  assistantStatus: ["assistant", "status"] as const,
+  assistantConversations: ["assistant", "conversations"] as const,
+  assistantConversation: (id: number) => ["assistant", "conversation", id] as const,
 };

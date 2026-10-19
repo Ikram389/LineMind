@@ -37,6 +37,7 @@ const PAGES: { name: string; path: string; role: string; dark?: boolean }[] = [
   { name: "14-lines", path: "/", role: "analyst" },
   { name: "15-line-overview-tv", path: `/lines/${LINE}?tv=1`, role: "production_supervisor" },
   { name: "16-line-overview-dark", path: `/lines/${LINE}`, role: "production_supervisor", dark: true },
+  { name: "17-assistant", path: "/assistant", role: "production_supervisor" },
 ];
 
 /** Switches the theme through the account menu (only exists after the redesign). */

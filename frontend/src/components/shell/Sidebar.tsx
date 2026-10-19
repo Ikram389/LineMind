@@ -8,6 +8,7 @@ import {
   Settings,
   SlidersHorizontal,
   Siren,
+  Sparkles,
   Tags,
   TimerOff,
   Wrench,
@@ -115,6 +116,7 @@ export function Sidebar({ lineId, collapsed, onToggle, openAlerts }: SidebarProp
               count={openAlerts}
               accessibleName={openAlerts > 0 ? t("appbar.openAlerts", { count: openAlerts }) : undefined}
             />
+            <Item to="/assistant" label={t("assistant.title")} Icon={Sparkles} collapsed={collapsed} />
           </Group>
         </div>
 

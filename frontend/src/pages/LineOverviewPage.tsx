@@ -7,6 +7,7 @@ import { getLineStatus, getOee } from "../api/endpoints.ts";
 import type { LiveMessage } from "../api/types.ts";
 import { queryKeys } from "../api/queryKeys.ts";
 import { AlertBanner } from "../components/alerts/AlertBanner.tsx";
+import { AskAssistantButton } from "../components/assistant/AssistantPanel.tsx";
 import { ClassifyPanel } from "../components/ClassifyPanel.tsx";
 import { Header } from "../components/Header.tsx";
 import { IncidentBanner } from "../components/IncidentBanner.tsx";
@@ -78,6 +79,7 @@ export function LineOverviewPage() {
   });
 
   const zone = status.data?.factory_timezone ?? factory.data?.timezone ?? "UTC";
+  const tv = useSearchParams()[0].get("tv") === "1";
   const incident = status.data?.open_incident ?? null;
 
   return (
@@ -92,6 +94,15 @@ export function LineOverviewPage() {
           <>
             <LiveIndicator status={live} />
             <UnclassifiedBadge lineId={lineId} shift={shift.data} />
+            {!tv && (
+              <AskAssistantButton
+                lineId={lineId}
+                lineName={line.data?.name ?? ""}
+                start={shiftStart}
+                end={currentShift ? new Date(Math.min(nowMs, Date.parse(currentShift.end))).toISOString() : null}
+                zone={zone}
+              />
+            )}
             <TvButton />
           </>
         }

@@ -286,6 +286,42 @@ Any problem seen in LineMind can become a **maintenance action**: press **Create
 - **Before / after:** for a recurring problem, the action page compares stops per 10 hours of run time before and after the fix, so a quieter week doesn't look like an improvement. A supervisor then verifies whether the fix was effective.
 - Open **Maintenance** in the top bar. The wrench badge counts your open assigned actions.
 
+## AI production assistant
+
+Ask questions about production in plain language (English, French or Arabic): **Assistant** in the left menu, or **Ask the assistant** on the line overview and the Downtime page (it starts with that line and time range). Answers are built only from LineMind's data: each one shows the time range used, the key figures, links to the source screens, notes from the data, and "How I got this" (the data tools it called). A number the assistant could not find in LineMind's data is marked **not verified**.
+
+> **Privacy:** with a hosted model such as Groq, your question and the data the assistant looks up are sent to that provider. Use a free tier **with test data only**. In production LineMind uses a local model, so data stays in the factory.
+
+### Set it up with Groq (development, free tier)
+
+1. Create a free account at https://console.groq.com and an API key (**API Keys**).
+2. In `.env`:
+   ```
+   ASSISTANT_BASE_URL=https://api.groq.com/openai/v1
+   ASSISTANT_MODEL=openai/gpt-oss-120b
+   ASSISTANT_API_KEY=gsk_...your key...
+   ASSISTANT_EXTRA_PARAMS={"reasoning_effort": "low"}
+   ```
+   Groq serves open models with tool calling; see https://console.groq.com/docs/tool-use. `openai/gpt-oss-120b` is the development choice. `openai/gpt-oss-20b` is the production candidate: it runs on one 16 GB GPU with Ollama.
+3. Restart the backend: `docker compose up -d backend`.
+4. Turn the assistant on for your organization: Django admin → **Assistant settings** → add → organization *Demo Beverages*, **Enabled** (the change is audited).
+5. Check: `GET /api/v1/assistant/status/` should say `"reachable": true, "tool_calling": true`.
+
+**Free-tier limits.** Groq limits requests and tokens per minute. When a limit is hit, LineMind waits and retries (it respects `retry-after`); if that is not enough, the assistant says it is busy. Ask again a moment later.
+
+**Later, a local model:** only the variables change, e.g. `ASSISTANT_BASE_URL=http://<server>:11434/v1`, `ASSISTANT_MODEL=gpt-oss:20b`, `ASSISTANT_API_KEY=` (empty).
+
+**Without any model:** `ASSISTANT_PROVIDER=fake` shows a fixed reply, for working on the screens.
+
+### Evaluate a model
+
+```powershell
+docker compose exec backend python manage.py assistant_eval
+docker compose exec backend python manage.py assistant_eval --models openai/gpt-oss-120b,openai/gpt-oss-20b
+```
+
+The command loads its own "Assistant Eval" data (simulator fixtures with known answers), asks about 20 questions (the examples in English, French and Arabic, plus questions that must be answered "no data available"), and writes a report to `backend/reports/assistant_eval/`. It shows the correct numbers, sources cited, unverified numbers, invalid tool calls and response time per question. The production candidate (gpt-oss-20b) is listed separately, with every question where it differs from the development model. Requests are paced to stay within free-tier limits, so a run takes several minutes per model.
+
 ## Factory simulator
 
 The simulator (`simulator/`) is a virtual bottling line: M01 Bottle feeder → M02 Rinser → M03 Filler → M04 Capper → M05 Labeler → M06 Packer, with a conveyor (buffer) between each pair. It plays a **scenario** (a YAML file in `simulator/scenarios/`) and sends the resulting machine events to the event API.

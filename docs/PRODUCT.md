@@ -242,7 +242,15 @@ Start with one line, one inspection station, one defect type.
 - Pattern: the LLM calls backend tools (e.g. `get_downtime_by_machine(line_id, start, end)`); Python code runs queries and computes all metrics; the LLM only summarizes.
 - Every answer shows time range, metrics, links to source events, and uncertainty.
 - Tools enforce the requesting user's permissions.
-- Example questions: "Which machine caused the most downtime this week?", "Did label defects increase after the last changeover?"
+- Example questions:
+  1. "Which machine caused the most downtime this week?"
+  2. "Did label defects increase after the last changeover?"
+  3. "What was the OEE of Bottling Line 1 during yesterday's morning shift, and what lost the most time?"
+  4. "What was the first observed stop of the longest line stop today?"
+  5. "Did the labeler maintenance action reduce the stops?"
+- Answers in the user's language (English, French, Arabic). Numbers in an answer that are not found in the tool results are marked "not verified"; numbers that only come from the question are marked "from your question".
+- Read-only: the assistant never classifies stops, creates actions or changes anything.
+- **Data leaving the site.** With a hosted model (e.g. Groq for development), the question and the tool results are sent to that provider. Free tiers must only be used with test data. Production uses a local model on the factory's server, so data stays on site. The assistant is off per organization until a platform operator turns it on.
 
 ---
 
