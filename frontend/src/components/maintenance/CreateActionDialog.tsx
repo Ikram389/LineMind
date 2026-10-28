@@ -9,6 +9,7 @@ import { ACTION_TYPES, type ActionType, type PrefillSource } from "../../api/mai
 import { queryKeys } from "../../api/queryKeys.ts";
 import type { MessageKey } from "../../i18n/en.ts";
 import { t } from "../../i18n/t.ts";
+import { buttonClass } from "../ui/buttonClass.ts";
 import { usePermissions } from "../../lib/permissions.ts";
 
 const field = "rounded-lg border border-gray-300 bg-white px-3 py-2 text-lg";
@@ -136,9 +137,7 @@ export function CreateActionButton({ source, compact = false }: { source: Prefil
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`inline-flex items-center gap-2 rounded-lg border-2 border-blue-700 font-semibold text-blue-800 ${
-          compact ? "min-h-10 px-2 text-base" : "min-h-12 px-4 text-lg"
-        }`}
+        className={buttonClass("secondary", "md", compact ? "px-3 text-small" : "")}
       >
         <Wrench aria-hidden className="h-5 w-5" />
         {t("maint.create")}

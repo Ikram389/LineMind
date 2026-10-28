@@ -1,5 +1,5 @@
 /** /dev/ui: every shared component on one page, to check looks in both themes (development only). */
-import { Plus, Wrench } from "lucide-react";
+import { Clock, Plus, Wrench } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "../components/ui/Button.tsx";
@@ -7,13 +7,15 @@ import { Card } from "../components/ui/Card.tsx";
 import { SegmentedControl, Tabs } from "../components/ui/Choice.tsx";
 import { type Column, DataTable } from "../components/ui/DataTable.tsx";
 import { EmptyState, ErrorState, InlineNotice, Skeleton } from "../components/ui/Feedback.tsx";
-import { Field, controlClass } from "../components/ui/Field.tsx";
+import { CheckboxField, Field, controlClass } from "../components/ui/Field.tsx";
 import { FilterBar } from "../components/ui/FilterBar.tsx";
 import { Dialog, Drawer } from "../components/ui/Overlay.tsx";
 import { PageHeader } from "../components/ui/PageHeader.tsx";
+import { ParetoChart } from "../components/ui/ParetoChart.tsx";
 import { StatCard } from "../components/ui/StatCard.tsx";
 import { StatusBadge } from "../components/ui/StatusBadge.tsx";
 import { type StatusKind, STATUS } from "../components/ui/status.ts";
+import { Tag } from "../components/ui/Tag.tsx";
 import { Toast, Tooltip } from "../components/ui/Toast.tsx";
 import { t } from "../i18n/t.ts";
 import { type Theme, useTheme } from "../lib/theme.ts";
@@ -40,6 +42,9 @@ export default function DevUiPage() {
   const [tab, setTab] = useState<"a" | "b">("a");
   const [overlay, setOverlay] = useState<"drawer" | "dialog" | null>(null);
   const [toast, setToast] = useState(false);
+  const [checked, setChecked] = useState(true);
+  const [picked, setPicked] = useState<Set<number>>(new Set([1]));
+  const [paretoKey, setParetoKey] = useState<string | null>(null);
 
   return (
     <main className="flex flex-col gap-6 p-4 sm:p-6">
@@ -71,6 +76,7 @@ export default function DevUiPage() {
             {t("alerts.acknowledge")}
           </Button>
           <Button disabled>{t("table.next")}</Button>
+          <Button size="tile">{t("assistant.helpful")}</Button>
         </div>
       </Card>
 
@@ -118,9 +124,58 @@ export default function DevUiPage() {
         </div>
       </Card>
 
-      <Card title="DataTable">
-        <DataTable columns={COLUMNS} rows={ROWS} rowKey={(r) => r.id} caption="DataTable" />
+      <Card title="DataTable · row selection">
+        <DataTable
+          columns={COLUMNS}
+          rows={ROWS}
+          rowKey={(r) => r.id}
+          caption="DataTable"
+          selection={{
+            isSelected: (r) => picked.has(r.id),
+            onToggle: (r) =>
+              setPicked((s) => {
+                const next = new Set(s);
+                if (next.has(r.id)) next.delete(r.id);
+                else next.add(r.id);
+                return next;
+              }),
+            onToggleAll: (rows) =>
+              setPicked((s) => (rows.every((r) => s.has(r.id)) ? new Set() : new Set(rows.map((r) => r.id)))),
+            rowLabel: (r) => r.machine,
+            allLabel: t("table.selectAll"),
+          }}
+        />
       </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card title="Tag · CheckboxField">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2">
+              <Tag>{t("role.consequence")}</Tag>
+              <Tag tone="accent">{t("pareto.lineView")}</Tag>
+              <Tag tone="warning">{t("theme.note")}</Tag>
+              <Tag tone="critical" icon={Clock}>
+                {t("detail.ongoing")}
+              </Tag>
+            </div>
+            <CheckboxField label={t("filters.includePlanned")} checked={checked} onChange={setChecked} />
+          </div>
+        </Card>
+        <Card title="ParetoChart">
+          <ParetoChart
+            rows={[
+              { key: "a", label: "Labeler", value: 42, cumulative: 55 },
+              { key: "b", label: "Filler", value: 20, cumulative: 81 },
+              { key: "c", label: "Capper", value: 14, cumulative: 100 },
+            ]}
+            valueLabel={t("pareto.duration")}
+            cumulativeLabel={t("pareto.cumulative")}
+            ariaLabel={t("pareto.chart")}
+            selectedKey={paretoKey}
+            onSelect={setParetoKey}
+          />
+        </Card>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card title="EmptyState · ErrorState">

@@ -9,13 +9,16 @@ import { expect, type Page, test } from "@playwright/test";
 
 const PASSWORD = process.env.DEMO_USER_PASSWORD ?? "";
 const LINE = process.env.SHOT_LINE ?? "1";
+/** A range with data, so tables, badges and charts are checked too. */
+const RANGE = process.env.SHOT_RANGE ?? "start=2026-10-17T05:00:00Z&end=2026-10-17T21:00:00Z";
 /** Pages to check; set A11Y_PAGES=overview,tv to check only some. */
 const ONLY = (process.env.A11Y_PAGES ?? "").split(",").filter(Boolean);
 
 const PAGES: { name: string; path: string }[] = [
   { name: "overview", path: `/lines/${LINE}` },
   { name: "tv", path: `/lines/${LINE}?tv=1` },
-  { name: "downtime", path: `/lines/${LINE}/downtime` },
+  { name: "downtime", path: `/lines/${LINE}/downtime?${RANGE}` },
+  { name: "downtime-incident", path: `/lines/${LINE}/downtime?${RANGE}&incident=285` },
   { name: "quality", path: `/lines/${LINE}/quality` },
   { name: "alerts", path: "/alerts" },
   { name: "maintenance", path: "/maintenance" },

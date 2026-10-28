@@ -126,6 +126,12 @@ export const en = {
   "filters.machineView": "Machine view — includes blocked and starved time",
   "filters.clear": "Clear filters",
   "filters.noShift": "No shift found",
+  "filters.quickRanges": "Quick ranges",
+  "filters.lineViewShort": "Line view",
+  "filters.machineViewShort": "Machine view",
+  "downtime.subtitle": "{line} · times in {zone}",
+  "pareto.chart": "Pareto chart of downtime by group",
+  "drawer.subtitle": "{time} · {duration}",
 
   "summary.total": "Total downtime",
   "summary.stops": "Stops",

@@ -15,21 +15,24 @@ interface OverlayProps {
   "data-testid"?: string;
 }
 
-/** Closes on Escape and moves focus into the panel when it opens. */
+/** Closes on Escape and moves focus into the panel when it opens (once: a parent passing a
+ *  new onClose on every render must not pull focus out of a field being typed in). */
 function useOverlay(onClose: () => void) {
   const ref = useRef<HTMLElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     ref.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") close.current();
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
       previous?.focus?.();
     };
-  }, [onClose]);
+  }, []);
   return ref;
 }
 
@@ -66,7 +69,7 @@ export function Drawer({ title, subtitle, onClose, children, footer, ...rest }: 
         aria-labelledby={id}
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
-        className="flex h-full w-full max-w-xl flex-col border-l border-line bg-canvas shadow-xl"
+        className="flex h-full w-full max-w-xl flex-col border-l border-line bg-canvas shadow-xl outline-none"
         {...rest}
       >
         <Header id={id} title={title} subtitle={subtitle} onClose={onClose} />
@@ -94,7 +97,7 @@ export function Dialog({ title, subtitle, onClose, children, footer, size = "md"
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
         className={cn(
-          "flex max-h-[92vh] w-full flex-col rounded-t-card border border-line bg-surface shadow-xl sm:rounded-card",
+          "flex max-h-[92vh] w-full flex-col rounded-t-card border border-line bg-surface shadow-xl outline-none sm:rounded-card",
           size === "lg" ? "sm:max-w-4xl" : "sm:max-w-2xl",
         )}
         {...rest}

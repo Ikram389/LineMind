@@ -10,6 +10,10 @@ import { type Page, test } from "@playwright/test";
 const LABEL = process.env.SHOT_LABEL ?? "before";
 const PASSWORD = process.env.DEMO_USER_PASSWORD ?? "";
 const LINE = process.env.SHOT_LINE ?? "1";
+/** A range with data for the analysis pages (the demo data is not always recent). */
+const RANGE = process.env.SHOT_RANGE ?? "start=2026-10-17T05:00:00Z&end=2026-10-17T21:00:00Z";
+/** SHOT_THEME=dark takes every shot in the dark theme. */
+const THEME = process.env.SHOT_THEME === "dark" ? "Dark" : null;
 /** Only some pages, e.g. SHOT_PAGES=01,15,16 (name prefixes); default all. */
 const ONLY = (process.env.SHOT_PAGES ?? "").split(",").filter(Boolean);
 
@@ -20,11 +24,31 @@ const SIZES = [
 ];
 
 // Which demo user looks at which page (each page as its main audience sees it).
-const PAGES: { name: string; path: string; role: string; dark?: boolean }[] = [
+type Target = {
+  name: string;
+  path: string;
+  role: string;
+  dark?: boolean;
+  then?: (page: Page) => Promise<void>;
+  /** Drawers and dialogs are fixed to the viewport: shoot the viewport, not the full page. */
+  overlay?: boolean;
+};
+
+const PAGES: Target[] = [
   { name: "01-line-overview", path: `/lines/${LINE}`, role: "production_supervisor" },
   { name: "02-line-overview-operator", path: `/lines/${LINE}`, role: "machine_operator" },
   { name: "03-machine", path: `/lines/${LINE}/machines/5`, role: "production_supervisor" },
-  { name: "04-downtime", path: `/lines/${LINE}/downtime`, role: "production_supervisor" },
+  { name: "04-downtime", path: `/lines/${LINE}/downtime?${RANGE}`, role: "production_supervisor" },
+  { name: "04b-downtime-incident", path: `/lines/${LINE}/downtime?${RANGE}&incident=285`, role: "production_supervisor", overlay: true },
+  {
+    name: "04c-downtime-classify",
+    path: `/lines/${LINE}/downtime?${RANGE}`,
+    role: "production_supervisor",
+    overlay: true,
+    then: async (page) => {
+      await page.getByRole("button", { name: /^(Classify|Change)$/ }).first().click();
+    },
+  },
   { name: "05-unclassified", path: `/lines/${LINE}/unclassified`, role: "machine_operator" },
   { name: "06-reasons", path: `/lines/${LINE}/reasons`, role: "factory_manager" },
   { name: "07-quality", path: `/lines/${LINE}/quality`, role: "quality_inspector" },
@@ -38,6 +62,19 @@ const PAGES: { name: string; path: string; role: string; dark?: boolean }[] = [
   { name: "15-line-overview-tv", path: `/lines/${LINE}?tv=1`, role: "production_supervisor" },
   { name: "16-line-overview-dark", path: `/lines/${LINE}`, role: "production_supervisor", dark: true },
   { name: "17-assistant", path: "/assistant", role: "production_supervisor" },
+  {
+    name: "18-notifications",
+    path: `/lines/${LINE}`,
+    role: "production_supervisor",
+    overlay: true,
+    then: async (page) => {
+      await page.getByRole("button", { name: /^Notifications/ }).click();
+      const list = page.getByTestId("bell-list");
+      await list.waitFor();
+      const box = await list.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight, bottom: el.getBoundingClientRect().bottom }));
+      console.log(`bell list: content ${box.scroll}px, visible ${box.client}px, bottom at ${Math.round(box.bottom)}px of ${page.viewportSize()?.height}px`);
+    },
+  },
 ];
 
 /** Switches the theme through the account menu (only exists after the redesign). */
@@ -48,6 +85,19 @@ async function setTheme(page: Page, theme: "Light" | "Dark"): Promise<boolean> {
   await page.getByRole("button", { name: theme, exact: true }).click();
   await page.keyboard.press("Escape");
   return true;
+}
+
+/** Wait until the page has its data: no skeleton and no "Loading…" left (max 30 s). */
+async function settle(page: Page): Promise<void> {
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await page
+    .waitForFunction(
+      () => !document.querySelector(".animate-pulse") && !document.body.innerText.includes("Loading…"),
+      undefined,
+      { timeout: 30_000 },
+    )
+    .catch(() => {});
+  await page.waitForTimeout(1000); // charts animate in
 }
 
 async function login(page: Page, role: string): Promise<void> {
@@ -66,12 +116,20 @@ for (const size of SIZES) {
       const context = await browser.newContext({ viewport: { width: size.width, height: size.height } });
       const page = await context.newPage();
       await login(page, role);
+      if (THEME) {
+        await page.goto("/");
+        await page.waitForLoadState("networkidle").catch(() => {});
+        await setTheme(page, THEME);
+      }
       for (const target of pages.filter((p) => p.role === role)) {
         await page.goto(target.path);
-        await page.waitForLoadState("networkidle").catch(() => {});
+        await settle(page);
         if (target.dark && !(await setTheme(page, "Dark"))) continue;
-        await page.waitForTimeout(1500); // charts and live data settle
-        await page.screenshot({ path: `screenshots/${LABEL}/${size.name}/${target.name}.png`, fullPage: true });
+        if (target.then) {
+          await target.then(page).catch(() => {});
+          await page.waitForTimeout(800);
+        }
+        await page.screenshot({ path: `screenshots/${LABEL}/${size.name}/${target.name}.png`, fullPage: !target.overlay });
         if (target.dark) await setTheme(page, "Light");
       }
       await context.close();

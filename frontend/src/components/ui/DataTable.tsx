@@ -15,11 +15,23 @@ export interface Column<T> {
   sortable?: boolean;
   align?: "left" | "right";
   className?: string;
+  /** Keep this column (e.g. the row's action) visible at the right edge while the table scrolls. */
+  stickyEnd?: boolean;
 }
 
 export interface Sort {
   key: string;
   direction: "asc" | "desc";
+}
+
+/** Checkboxes in the first column (e.g. stops to classify together). */
+export interface RowSelection<T> {
+  isSelected: (row: T) => boolean;
+  onToggle: (row: T) => void;
+  onToggleAll: (rows: T[]) => void;
+  /** Accessible name of a row's checkbox, e.g. "Select Labeler at 10:05". */
+  rowLabel: (row: T) => string;
+  allLabel: string;
 }
 
 interface DataTableProps<T> {
@@ -33,6 +45,7 @@ interface DataTableProps<T> {
   pagination?: { total: number; offset: number; limit: number; onPage: (offset: number) => void };
   rowTestId?: (row: T) => string;
   empty?: ReactNode;
+  selection?: RowSelection<T>;
 }
 
 /** A table with a sticky header, row hover, sortable headers and pagination. */
@@ -46,6 +59,7 @@ export function DataTable<T>({
   pagination,
   rowTestId,
   empty,
+  selection,
 }: DataTableProps<T>) {
   const [localSort, setLocalSort] = useState<Sort | null>(null);
   const current = onSort ? (sort ?? null) : localSort;
@@ -84,6 +98,17 @@ export function DataTable<T>({
           {caption && <caption className="sr-only">{caption}</caption>}
           <thead className="sticky top-0 z-10 bg-surface-muted">
             <tr>
+              {selection && (
+                <th scope="col" className="w-12 border-b border-line px-3 py-2">
+                  <input
+                    type="checkbox"
+                    aria-label={selection.allLabel}
+                    checked={sorted.length > 0 && sorted.every(selection.isSelected)}
+                    onChange={() => selection.onToggleAll(sorted)}
+                    className="h-5 w-5 accent-accent"
+                  />
+                </th>
+              )}
               {columns.map((column) => {
                 const sortable = Boolean(column.sortValue || column.sortable);
                 const direction = current?.key === column.key ? current.direction : null;
@@ -96,6 +121,7 @@ export function DataTable<T>({
                     className={cn(
                       "border-b border-line px-3 py-2 text-small font-semibold text-ink-muted",
                       column.align === "right" && "text-right",
+                      column.stickyEnd && "sticky right-0 bg-surface-muted",
                     )}
                   >
                     {sortable ? (
@@ -120,12 +146,33 @@ export function DataTable<T>({
               <tr
                 key={rowKey(row)}
                 data-testid={rowTestId?.(row)}
-                className="border-b border-line last:border-b-0 hover:bg-surface-muted"
+                className={cn(
+                  "border-b border-line last:border-b-0 hover:bg-surface-muted",
+                  selection?.isSelected(row) && "bg-accent-soft",
+                )}
               >
+                {selection && (
+                  <td className="h-12 px-3 py-2">
+                    <label className="inline-flex min-h-11 min-w-11 cursor-pointer items-center">
+                      <input
+                        type="checkbox"
+                        aria-label={selection.rowLabel(row)}
+                        checked={selection.isSelected(row)}
+                        onChange={() => selection.onToggle(row)}
+                        className="h-5 w-5 accent-accent"
+                      />
+                    </label>
+                  </td>
+                )}
                 {columns.map((column) => (
                   <td
                     key={column.key}
-                    className={cn("h-12 px-3 py-2 align-middle text-ink", column.align === "right" && "text-right tabular-nums", column.className)}
+                    className={cn(
+                      "h-12 px-3 py-2 align-middle text-ink",
+                      column.align === "right" && "text-right tabular-nums",
+                      column.stickyEnd && "sticky right-0 border-l border-line bg-surface",
+                      column.className,
+                    )}
                   >
                     {column.render(row)}
                   </td>

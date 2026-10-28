@@ -1,7 +1,11 @@
+import { Repeat } from "lucide-react";
+
 import type { RecurringResponse } from "../../api/analysisTypes.ts";
 import { t } from "../../i18n/t.ts";
-import { CreateActionButton } from "../maintenance/CreateActionDialog.tsx";
 import { formatDateTime, formatDuration } from "../../lib/time.ts";
+import { CreateActionButton } from "../maintenance/CreateActionDialog.tsx";
+import { Card } from "../ui/Card.tsx";
+import { EmptyState } from "../ui/Feedback.tsx";
 
 export function RecurringPanel({
   recurring,
@@ -14,27 +18,26 @@ export function RecurringPanel({
   range?: { start: string; end: string };
 }) {
   return (
-    <section className="rounded-xl bg-white p-4 shadow-sm">
-      <h2 className="text-xl font-semibold">{t("recurring.title")}</h2>
+    <Card title={t("recurring.title")}>
       {recurring.threshold !== null && (
-        <p className="mb-2 text-base text-gray-600">
-          {t("recurring.threshold", { threshold: recurring.threshold })}
-        </p>
+        <p className="mb-3 text-small text-ink-muted">{t("recurring.threshold", { threshold: recurring.threshold })}</p>
       )}
       {recurring.items.length === 0 ? (
-        <p className="text-lg text-gray-600">{t("recurring.empty")}</p>
+        <EmptyState icon={Repeat} title={t("recurring.empty")} />
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col divide-y divide-line">
           {recurring.items.map((item) => (
             <li
               key={`${item.machine.id}-${item.reason?.id ?? item.alarm_code ?? "none"}`}
-              className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-lg"
+              className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0"
             >
-              <p className="font-semibold">
-                {item.machine.name} ·{" "}
-                {item.reason ? item.reason.name : item.alarm_code ?? t("recurring.noAlarm")}
+              <p className="flex items-start gap-2 text-body font-semibold text-ink">
+                <Repeat aria-hidden className="mt-1 h-4 w-4 shrink-0 text-warning" />
+                <span>
+                  {item.machine.name} · {item.reason ? item.reason.name : item.alarm_code ?? t("recurring.noAlarm")}
+                </span>
               </p>
-              <p className="text-gray-700">
+              <p className="text-small text-ink-muted">
                 {t("recurring.item", {
                   count: item.count,
                   duration: formatDuration(item.total_seconds),
@@ -42,7 +45,7 @@ export function RecurringPanel({
                 })}
               </p>
               {range && (
-                <div className="mt-2">
+                <div>
                   <CreateActionButton
                     compact
                     source={{
@@ -59,6 +62,6 @@ export function RecurringPanel({
           ))}
         </ul>
       )}
-    </section>
+    </Card>
   );
 }

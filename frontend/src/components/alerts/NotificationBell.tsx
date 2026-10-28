@@ -53,10 +53,11 @@ export function NotificationBell() {
         <div
           role="dialog"
           aria-label={t("bell.title")}
-          className="absolute right-0 z-50 mt-2 w-[min(28rem,calc(100vw-2rem))] rounded-card border border-line bg-surface p-3 text-ink shadow-lg"
+          className="absolute right-0 z-50 mt-2 flex max-h-[calc(100vh-5rem)] w-[min(28rem,calc(100vw-2rem))] flex-col rounded-card border border-line bg-surface p-3 text-ink shadow-lg"
         >
           {latest.data && latest.data.results.length === 0 && <p className="p-2 text-body text-ink-muted">{t("bell.empty")}</p>}
-          <ul className="flex flex-col gap-2">
+          {/* The panel hangs from the sticky top bar: the list scrolls inside it, the buttons stay. */}
+          <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain" data-testid="bell-list">
             {(latest.data?.results ?? []).map((n) => (
               <li key={n.id}>
                 <Link
@@ -77,7 +78,7 @@ export function NotificationBell() {
               </li>
             ))}
           </ul>
-          <div className="mt-3 flex justify-between gap-2">
+          <div className="mt-3 flex shrink-0 justify-between gap-2 border-t border-line pt-3">
             <button
               type="button"
               onClick={() => readAll.mutate()}

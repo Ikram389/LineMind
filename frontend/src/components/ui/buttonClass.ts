@@ -2,8 +2,9 @@
 import { cn } from "../../lib/cn.ts";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-/** md = 44 px (the minimum touch target), lg = 56 px (operator actions on tablets). */
-export type ButtonSize = "md" | "lg";
+/** md = 44 px (the minimum touch target), lg = 56 px (operator actions on tablets),
+ *  tile = 56 px with body text, for grids of choices (e.g. downtime reasons). */
+export type ButtonSize = "md" | "lg" | "tile";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary: "border border-transparent bg-accent text-on-accent hover:bg-accent-hover",
@@ -14,6 +15,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
 const SIZES: Record<ButtonSize, string> = {
   md: "min-h-11 gap-2 px-4 text-body",
   lg: "min-h-14 gap-3 px-6 text-title",
+  tile: "min-h-14 gap-2 px-4 py-2 text-body",
 };
 
 /** The classes of a button, for links that look like buttons. */

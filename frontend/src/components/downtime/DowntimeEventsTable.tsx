@@ -1,24 +1,14 @@
-import { ArrowDownUp } from "lucide-react";
+import { Clock } from "lucide-react";
 
 import type { AnalysedDowntimeEvent } from "../../api/analysisTypes.ts";
-import type { MessageKey } from "../../i18n/en.ts";
 import { t } from "../../i18n/t.ts";
 import type { Permissions } from "../../lib/permissions.ts";
 import { formatDateTime, formatDuration } from "../../lib/time.ts";
-
-const CATEGORY_KEY: Record<string, MessageKey> = {
-  breakdown: "category.breakdown",
-  blocked: "category.blocked",
-  starved: "category.starved",
-  planned: "category.planned",
-  no_data: "category.no_data",
-};
-
-const ROLE_STYLE: Record<string, string> = {
-  first_observed_stop: "bg-red-800 text-white",
-  secondary_breakdown: "bg-orange-600 text-white",
-  consequence: "bg-gray-200 text-gray-800",
-};
+import { Button } from "../ui/Button.tsx";
+import { type Column, DataTable, type Sort } from "../ui/DataTable.tsx";
+import { EmptyState } from "../ui/Feedback.tsx";
+import { Tag } from "../ui/Tag.tsx";
+import { CategoryBadge, RoleBadge } from "./badges.tsx";
 
 interface DowntimeEventsTableProps {
   events: AnalysedDowntimeEvent[];
@@ -26,6 +16,7 @@ interface DowntimeEventsTableProps {
   offset: number;
   limit: number;
   zone: string;
+  /** Server ordering, e.g. "-started_at". */
   ordering: string;
   permissions: Permissions;
   selected: Set<number>;
@@ -35,6 +26,12 @@ interface DowntimeEventsTableProps {
   onPage: (offset: number) => void;
   onClassify: (event: AnalysedDowntimeEvent) => void;
   onOpenIncident: (incidentId: number) => void;
+}
+
+function toSort(ordering: string): Sort {
+  return ordering.startsWith("-")
+    ? { key: ordering.slice(1), direction: "desc" }
+    : { key: ordering, direction: "asc" };
 }
 
 export function DowntimeEventsTable({
@@ -53,139 +50,111 @@ export function DowntimeEventsTable({
   onClassify,
   onOpenIncident,
 }: DowntimeEventsTableProps) {
-  if (events.length === 0) return <p className="text-lg text-gray-600">{t("table.empty")}</p>;
-
-  const sortButton = (field: string, label: MessageKey) => {
-    const next = ordering === field ? `-${field}` : field;
-    return (
-      <button
-        type="button"
-        onClick={() => onSort(next)}
-        aria-label={t("table.sortBy", { column: t(label) })}
-        className="inline-flex items-center gap-1 font-semibold"
-      >
-        {t(label)}
-        <ArrowDownUp aria-hidden className="h-4 w-4" />
-      </button>
-    );
-  };
+  const columns: Column<AnalysedDowntimeEvent>[] = [
+    {
+      key: "started_at",
+      header: t("table.start"),
+      sortable: true,
+      render: (e) => <span className="whitespace-nowrap tabular-nums">{formatDateTime(e.started_at, zone)}</span>,
+    },
+    { key: "machine", header: t("table.machine"), sortable: true, render: (e) => e.machine.name },
+    {
+      key: "duration",
+      header: t("table.duration"),
+      sortable: true,
+      render: (e) => (
+        <span className="inline-flex flex-wrap items-center gap-1 whitespace-nowrap tabular-nums">
+          {formatDuration(e.clipped_duration_seconds ?? e.duration_seconds)}
+          {e.is_ongoing && (
+            <Tag tone="critical" icon={Clock}>
+              {t("detail.ongoing")}
+            </Tag>
+          )}
+        </span>
+      ),
+    },
+    {
+      key: "category",
+      header: t("table.category"),
+      render: (e) => (
+        <span className="inline-flex flex-wrap items-center gap-1">
+          <CategoryBadge category={e.category} />
+          {e.alarm_code && <span className="text-small text-ink-muted">{e.alarm_code}</span>}
+        </span>
+      ),
+    },
+    {
+      key: "reason",
+      header: t("table.reason"),
+      // Who classified it, under the reason: one column less, so the action stays in view.
+      render: (e) =>
+        e.classification ? (
+          <span className="flex flex-col">
+            <span>{e.classification.reason.name}</span>
+            <span className="max-w-56 truncate text-small text-ink-muted" title={e.classification.created_by ?? ""}>
+              {e.classification.created_by && `${t("table.classifiedBy")}: ${e.classification.created_by}`}
+            </span>
+          </span>
+        ) : (
+          <span className="text-ink-muted">{t("detail.notClassified")}</span>
+        ),
+    },
+    {
+      key: "role",
+      header: `${t("table.role")} · ${t("table.incident")}`,
+      // The line stop it belongs to, under its role: one column less.
+      render: (e) => (
+        <span className="flex flex-col items-start gap-0.5 whitespace-nowrap">
+          <RoleBadge role={e.role_in_incident} />
+          {e.incident !== null && (
+            <button
+              type="button"
+              onClick={() => onOpenIncident(e.incident as number)}
+              aria-label={t("drawer.title", { id: e.incident })}
+              className="min-h-11 rounded-control px-1 font-semibold text-accent underline hover:bg-accent-soft"
+            >
+              #{e.incident}
+            </button>
+          )}
+        </span>
+      ),
+    },
+  ];
+  if (permissions.canClassify) {
+    columns.push({
+      key: "actions",
+      stickyEnd: true,
+      header: <span className="sr-only">{t("table.classify")}</span>,
+      render: (e) => (
+        <Button onClick={() => onClassify(e)}>
+          {e.classification ? t("table.reclassify") : t("table.classify")}
+        </Button>
+      ),
+    });
+  }
 
   return (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-lg">
-          <thead className="border-b-2 border-gray-300 text-gray-700">
-            <tr>
-              {permissions.canBulkClassify && (
-                <th className="p-2">
-                  <input
-                    type="checkbox"
-                    aria-label={t("table.selectAll")}
-                    checked={events.every((e) => selected.has(e.id))}
-                    onChange={() => onToggleAll(events.map((e) => e.id))}
-                    className="h-6 w-6"
-                  />
-                </th>
-              )}
-              <th className="p-2">{sortButton("started_at", "table.start")}</th>
-              <th className="p-2">{sortButton("machine", "table.machine")}</th>
-              <th className="p-2">{sortButton("duration", "table.duration")}</th>
-              <th className="p-2">{t("table.category")}</th>
-              <th className="p-2">{t("table.reason")}</th>
-              <th className="p-2">{t("table.classifiedBy")}</th>
-              <th className="p-2">{t("table.role")}</th>
-              <th className="p-2">{t("table.incident")}</th>
-              {permissions.canClassify && <th className="p-2" />}
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((event) => (
-              <tr key={event.id} className="border-b border-gray-100 align-middle" data-testid={`event-row-${event.id}`}>
-                {permissions.canBulkClassify && (
-                  <td className="p-2">
-                    <input
-                      type="checkbox"
-                      aria-label={t("table.select", {
-                        machine: event.machine.name,
-                        time: formatDateTime(event.started_at, zone),
-                      })}
-                      checked={selected.has(event.id)}
-                      onChange={() => onToggle(event.id)}
-                      className="h-6 w-6"
-                    />
-                  </td>
-                )}
-                <td className="p-2 tabular-nums">{formatDateTime(event.started_at, zone)}</td>
-                <td className="p-2">{event.machine.name}</td>
-                <td className="p-2 tabular-nums">
-                  {formatDuration(event.clipped_duration_seconds ?? event.duration_seconds)}
-                  {event.is_ongoing && <span className="ml-1 text-red-700">({t("detail.ongoing")})</span>}
-                </td>
-                <td className="p-2">
-                  {t(CATEGORY_KEY[event.category] ?? "category.breakdown")}
-                  {event.alarm_code && <span className="ml-1 text-gray-600">{event.alarm_code}</span>}
-                </td>
-                <td className="p-2">
-                  {event.classification?.reason.name ?? (
-                    <span className="text-gray-500">{t("detail.notClassified")}</span>
-                  )}
-                </td>
-                <td className="p-2 text-base text-gray-700">{event.classification?.created_by ?? ""}</td>
-                <td className="p-2">
-                  {event.role_in_incident && (
-                    <span className={`rounded px-2 py-0.5 text-sm font-bold ${ROLE_STYLE[event.role_in_incident] ?? ""}`}>
-                      {t(`role.${event.role_in_incident}` as MessageKey)}
-                    </span>
-                  )}
-                </td>
-                <td className="p-2">
-                  {event.incident !== null && (
-                    <button
-                      type="button"
-                      onClick={() => onOpenIncident(event.incident as number)}
-                      className="min-h-11 px-2 text-blue-800 underline"
-                    >
-                      #{event.incident}
-                    </button>
-                  )}
-                </td>
-                {permissions.canClassify && (
-                  <td className="p-2">
-                    <button
-                      type="button"
-                      onClick={() => onClassify(event)}
-                      className="min-h-12 rounded-lg bg-blue-700 px-4 text-lg font-semibold text-white"
-                    >
-                      {event.classification ? t("table.reclassify") : t("table.classify")}
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-3 flex items-center justify-between text-lg">
-        <span>{t("table.page", { from: offset + 1, to: Math.min(offset + limit, total), total })}</span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={offset === 0}
-            onClick={() => onPage(Math.max(0, offset - limit))}
-            className="min-h-12 rounded-lg border border-gray-300 px-4 disabled:opacity-40"
-          >
-            {t("table.previous")}
-          </button>
-          <button
-            type="button"
-            disabled={offset + limit >= total}
-            onClick={() => onPage(offset + limit)}
-            className="min-h-12 rounded-lg border border-gray-300 px-4 disabled:opacity-40"
-          >
-            {t("table.next")}
-          </button>
-        </div>
-      </div>
-    </div>
+    <DataTable
+      columns={columns}
+      rows={events}
+      rowKey={(e) => e.id}
+      rowTestId={(e) => `event-row-${e.id}`}
+      caption={t("table.title")}
+      sort={toSort(ordering)}
+      onSort={(sort) => onSort(sort.direction === "desc" ? `-${sort.key}` : sort.key)}
+      pagination={{ total, offset, limit, onPage }}
+      empty={<EmptyState title={t("table.empty")} />}
+      selection={
+        permissions.canBulkClassify
+          ? {
+              isSelected: (e) => selected.has(e.id),
+              onToggle: (e) => onToggle(e.id),
+              onToggleAll: (rows) => onToggleAll(rows.map((e) => e.id)),
+              rowLabel: (e) => t("table.select", { machine: e.machine.name, time: formatDateTime(e.started_at, zone) }),
+              allLabel: t("table.selectAll"),
+            }
+          : undefined
+      }
+    />
   );
 }

@@ -44,3 +44,33 @@ export function Field({ label, hint, error, className, children }: FieldProps) {
     </div>
   );
 }
+
+interface CheckboxFieldProps {
+  label: ReactNode;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  className?: string;
+}
+
+/** A checkbox with its label: the whole row (44 px high) is the touch target. */
+export function CheckboxField({ label, checked, onChange, disabled, className }: CheckboxFieldProps) {
+  return (
+    <label
+      className={cn(
+        "inline-flex min-h-11 cursor-pointer items-center gap-2 text-body text-ink",
+        disabled && "cursor-not-allowed opacity-60",
+        className,
+      )}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-5 w-5 shrink-0 accent-accent"
+      />
+      {label}
+    </label>
+  );
+}

@@ -23,8 +23,11 @@ import { ParetoPanel } from "../components/downtime/ParetoPanel.tsx";
 import { RecurringPanel } from "../components/downtime/RecurringPanel.tsx";
 import { SummaryCards } from "../components/downtime/SummaryCards.tsx";
 import { AskAssistantButton } from "../components/assistant/AssistantPanel.tsx";
-import { LineNav } from "../components/LineNav.tsx";
+import { UnclassifiedBadge } from "../components/LineNav.tsx";
 import { Panel } from "../components/Panel.tsx";
+import { Button } from "../components/ui/Button.tsx";
+import { ErrorState } from "../components/ui/Feedback.tsx";
+import { PageHeader } from "../components/ui/PageHeader.tsx";
 import { t } from "../i18n/t.ts";
 import type { ClassifyTarget } from "../lib/classifyTarget.ts";
 import { type DowntimeFilters, filtersToQuery, useDowntimeFilters } from "../lib/downtimeFilters.ts";
@@ -167,21 +170,23 @@ export function DowntimePage() {
   const selectedEvents = (events.data?.results ?? []).filter((e) => selected.has(e.id));
 
   return (
-    <main className="flex min-h-screen flex-col gap-4 bg-gray-100 p-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-bold">{t("downtime.title")}</h1>
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="text-lg text-gray-600">{t("time.zone", { zone })}</p>
-          <AskAssistantButton
-            lineId={lineId}
-            lineName={line.data?.name ?? ""}
-            start={effective.start}
-            end={effective.end}
-            zone={zone}
-          />
-        </div>
-      </header>
-      <LineNav lineId={lineId} shift={shift.data} />
+    <main className="flex flex-col gap-6 p-4 sm:p-6">
+      <PageHeader
+        title={t("downtime.title")}
+        subtitle={t("downtime.subtitle", { line: line.data?.name ?? "", zone })}
+        actions={
+          <>
+            <UnclassifiedBadge lineId={lineId} shift={shift.data} />
+            <AskAssistantButton
+              lineId={lineId}
+              lineName={line.data?.name ?? ""}
+              start={effective.start}
+              end={effective.end}
+              zone={zone}
+            />
+          </>
+        }
+      />
 
       <FilterBar
         filters={filters}
@@ -199,58 +204,64 @@ export function DowntimePage() {
         }
       />
 
-      <Panel isLoading={summary.isLoading} isError={summary.isError}>
-        {summary.data && <SummaryCards summary={summary.data} />}
-      </Panel>
+      {summary.isLoading || summary.isError ? (
+        <Panel isLoading={summary.isLoading} isError={summary.isError} />
+      ) : (
+        summary.data && <SummaryCards summary={summary.data} />
+      )}
 
-      <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
-        <Panel isLoading={pareto.isLoading} isError={pareto.isError}>
-          {pareto.data && (
-            <ParetoPanel
-              pareto={pareto.data}
-              groupBy={filters.group}
-              onGroupBy={(group) => setFilters({ group })}
-              selectedKey={selectedGroup}
-              onSelectGroup={(key) => {
-                setSelectedGroup(key);
-                setFilters(groupFilter(key, reasonCodes));
-              }}
-            />
-          )}
-        </Panel>
-        <Panel isLoading={recurring.isLoading} isError={recurring.isError}>
-          {recurring.data && (
-            <RecurringPanel
-              recurring={recurring.data}
-              zone={zone}
-              range={effective.start && effective.end ? { start: effective.start, end: effective.end } : undefined}
-            />
-          )}
-        </Panel>
+      <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
+        {pareto.data ? (
+          <ParetoPanel
+            pareto={pareto.data}
+            groupBy={filters.group}
+            onGroupBy={(group) => setFilters({ group })}
+            selectedKey={selectedGroup}
+            onSelectGroup={(key) => {
+              setSelectedGroup(key);
+              setFilters(groupFilter(key, reasonCodes));
+            }}
+          />
+        ) : (
+          <Panel title={t("pareto.title")} isLoading={pareto.isLoading} isError={pareto.isError} />
+        )}
+        {recurring.data ? (
+          <RecurringPanel
+            recurring={recurring.data}
+            zone={zone}
+            range={effective.start && effective.end ? { start: effective.start, end: effective.end } : undefined}
+          />
+        ) : (
+          <Panel title={t("recurring.title")} isLoading={recurring.isLoading} isError={recurring.isError} />
+        )}
       </div>
 
-      <Panel title={t("table.title")} isLoading={events.isLoading} isError={events.isError}>
-        <div className="mb-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => void exportCsv()}
-            disabled={exporting}
-            className="inline-flex min-h-12 items-center gap-2 rounded-lg border-2 border-gray-400 px-4 text-lg"
-          >
-            <Download aria-hidden className="h-5 w-5" />
-            {exporting ? t("table.exporting") : t("table.export")}
-          </button>
-          {permissions.canBulkClassify && selected.size > 0 && (
-            <button
-              type="button"
-              onClick={() => setClassifying(selectedEvents)}
-              className="min-h-12 rounded-lg bg-blue-700 px-4 text-lg font-semibold text-white"
+      <Panel
+        title={t("table.title")}
+        isLoading={events.isLoading}
+        isError={events.isError}
+        actions={
+          <>
+            {permissions.canBulkClassify && selected.size > 0 && (
+              <Button variant="primary" onClick={() => setClassifying(selectedEvents)}>
+                {t("table.bulk", { count: selected.size })}
+              </Button>
+            )}
+            <Button
+              onClick={() => void exportCsv()}
+              disabled={exporting}
+              icon={<Download className="h-5 w-5" />}
             >
-              {t("table.bulk", { count: selected.size })}
-            </button>
-          )}
-          {exportError && <p role="alert" className="text-lg text-red-700">{t("table.exportFailed")}</p>}
-        </div>
+              {exporting ? t("table.exporting") : t("table.export")}
+            </Button>
+          </>
+        }
+      >
+        {exportError && (
+          <div className="mb-3">
+            <ErrorState text={t("table.exportFailed")} />
+          </div>
+        )}
         {events.data && (
           <DowntimeEventsTable
             events={events.data.results}
