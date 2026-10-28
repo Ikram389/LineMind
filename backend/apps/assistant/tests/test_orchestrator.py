@@ -58,7 +58,8 @@ def test_a_scripted_conversation(
         FakeTurn(text="Let me check. ", tool_calls=[("get_downtime", downtime_args(bottling))]),
         FakeTurn(text=f"From 10:00 to 10:15 the line lost {total} min in {stops} stop [1]."),
     )
-    conv = conversation(line=bottling.line)
+    # Asked from the Downtime screen showing the jam: that range is LineMind's ("screen").
+    conv = conversation(line=bottling.line, context_start=JAM_START, context_end=JAM_END)
     events = run(conv, "How much downtime this morning?")
 
     names = [name for name, _ in events]
@@ -104,10 +105,9 @@ def test_the_system_prompt_has_time_shifts_lines_and_ready_ranges(
     assert "Current time: Monday 12 October 2026 11:00 (UTC)" in system
     assert "Night 22:00–06:00 (ends next day)" in system
     assert f"Bottling Line (line_id {bottling.line.pk}, Plant B)" in system
-    assert "- today: start=2026-10-12T00:00:00Z end=2026-10-12T11:00:00Z" in system
-    assert (
-        "The user is looking at Bottling Line" in system and "start=2026-10-12T10:00:00Z" in system
-    )
+    assert "- range_id=today: Today (so far), Mon 12 Oct 2026 00:00–11:00 (UTC)" in system
+    assert "The user is looking at Bottling Line" in system and "(range_id=screen)" in system
+    assert "Write the whole answer in English." in system
     assert "Other Line" not in system  # another organization's line is never mentioned
 
 
@@ -121,7 +121,9 @@ def test_invalid_arguments_get_one_correction(
         FakeTurn(tool_calls=[("get_downtime", downtime_args(bottling))]),
         FakeTurn(text=f"The line lost {total} min [1]."),
     )
-    events = run(conversation(), "Downtime?")
+    events = run(
+        conversation(line=bottling.line, context_start=JAM_START, context_end=JAM_END), "Downtime?"
+    )
     assert events[-1][0] == "final"
     error = json.loads(provider.requests[1]["messages"][-1]["content"])
     assert error["error"] == "invalid_arguments" and "ISO date-time" in error["message"]
@@ -261,7 +263,8 @@ def test_earlier_answers_are_remembered_as_text(
     fake: Fake, conversation: NewConversation, bottling: Bottling
 ) -> None:
     conv = conversation()
-    fake(FakeTurn(text="Line 1 is fine."))
+    # Each answer comes after a tool call (no reminder needed).
+    fake(FakeTurn(tool_calls=[("list_lines", {})]), FakeTurn(text="Line 1 is fine."))
     run(conv, "First question")
     provider = fake(FakeTurn(text="Still fine."))
     run(conv, "And now?", now=AFTER_JAM + timedelta(minutes=1))

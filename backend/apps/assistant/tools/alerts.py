@@ -5,9 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from apps.assistant.tools.core import (
+    END,
+    RANGE_ID,
+    START,
     ChoiceParam,
-    InstantParam,
     IntParam,
+    RangeSlot,
     Source,
     Tool,
     ToolContext,
@@ -39,9 +42,11 @@ class GetAlerts(Tool):
             choices=("open", "unresolved", "resolved", "all"),
             default="unresolved",
         ),
-        InstantParam("start", "Optional: opened from.", required=False),
-        InstantParam("end", "Optional: opened before.", required=False),
+        RANGE_ID,
+        START,
+        END,
     )
+    ranges = (RangeSlot(required=False),)
 
     def check(self, args: dict[str, Any]) -> None:
         if "start" in args and "end" in args:

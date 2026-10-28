@@ -12,19 +12,22 @@ from datetime import datetime
 from statistics import mean
 
 from apps.assistant.eval.questions import BY_ID
-from apps.assistant.eval.runner import Score
+from apps.assistant.eval.runner import NOT_RUN, Score
 
 
 def _pct(part: int, whole: int) -> str:
     return f"{part}/{whole} ({round(100 * part / whole)}%)" if whole else "–"
 
 
-def summary_row(model: str, scores: Sequence[Score], label: str = "") -> str:
+def summary_row(model: str, all_scores: Sequence[Score], label: str = "") -> str:
+    """Questions not run (rate limit) are left out of every score and counted apart."""
+    scores = [s for s in all_scores if s.status != NOT_RUN]
+    skipped = len(all_scores) - len(scores)
     data = [s for s in scores if not s.no_data]
     nodata = [s for s in scores if s.no_data]
     times = [s.duration_ms for s in scores if s.duration_ms]
     return (
-        f"| {model}{label} | {len(scores)} "
+        f"| {model}{label} | {len(scores)} | {skipped} "
         f"| {_pct(sum(s.numbers_ok and s.texts_ok for s in data), len(data))} "
         f"| {_pct(sum(s.language_ok for s in scores), len(scores))} "
         f"| {_pct(sum(bool(s.no_data_ok) for s in nodata), len(nodata))} "
@@ -52,7 +55,7 @@ def _differences(dev: dict[str, Score], prod: dict[str, Score]) -> list[str]:
     rows = []
     for qid in BY_ID:
         a, b = dev.get(qid), prod.get(qid)
-        if a is None or b is None:
+        if a is None or b is None or NOT_RUN in (a.status, b.status):
             continue
         changes = []
         if (a.numbers_ok and a.texts_ok) != (
@@ -87,9 +90,10 @@ def render(
         "",
         "## Summary",
         "",
-        "| Model | Questions | Correct (numbers + text) | Language | No-data answered | "
-        "Sources cited | Unverified numbers | Invalid tool calls | Failed | Avg time | Tokens |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Model | Answered | Not run (rate limit) | Correct (numbers + text) | Language | "
+        "No-data answered | Sources cited | Unverified numbers | Invalid tool calls | Failed | "
+        "Avg time | Tokens |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for model, model_scores in scores.items():
         label = " **(production candidate)**" if model == production_model else ""
@@ -125,6 +129,14 @@ def render(
         lines += [f"### {model}", ""]
         for s in model_scores:
             q = BY_ID[s.question]
+            if s.status == NOT_RUN:
+                lines += [
+                    f"**{s.question}** ({q.language}) {q.text}",
+                    "",
+                    "- Not run (rate limit).",
+                    "",
+                ]
+                continue
             flags = [_verdict(s), f"lang {'ok' if s.language_ok else 'WRONG'}"]
             if s.unverified:
                 flags.append(f"{s.unverified} unverified")

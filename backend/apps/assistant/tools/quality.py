@@ -7,8 +7,10 @@ from typing import Any
 from apps.assistant.tools.core import (
     END,
     LINE,
+    RANGE_ID,
     START,
     ChoiceParam,
+    RangeSlot,
     Source,
     TextParam,
     Tool,
@@ -31,6 +33,13 @@ from apps.quality.services.metrics import (
 REPORTS = ("summary", "by_defect_type", "by_station", "by_machine", "by_product", "trend")
 MAX_GROUPS = 8
 MAX_BUCKETS = 24
+NO_BOTTLES = "not calculable: no bottles counted in this range"
+
+
+def rate_percent(ratio: float | None) -> float | str:
+    """A defect rate in %, or why there is none (never a bare null)."""
+    value = pct(ratio, 2)
+    return NO_BOTTLES if value is None else value
 
 
 class GetQuality(Tool):
@@ -39,8 +48,10 @@ class GetQuality(Tool):
         "Defects of a line in a range: summary (defects, defect rate, unreviewed), a Pareto "
         "by defect type, station, machine or product, or a trend by hour, shift or day."
     )
+    ranges = (RangeSlot(),)
     params = (
         LINE,
+        RANGE_ID,
         START,
         END,
         ChoiceParam(
@@ -79,7 +90,7 @@ class GetQuality(Tool):
             data.update(
                 {
                     "defects": s["defects"],
-                    "defect_rate_percent": pct(s["defect_rate"], 2),
+                    "defect_rate_percent": rate_percent(s["defect_rate"]),
                     "bottles_inspected_on_line": s["line_total_count"],
                     "unreviewed_results": s["unreviewed"],
                     "false_rejects": s["false_rejects"],
@@ -89,7 +100,7 @@ class GetQuality(Tool):
                             "station": st["station"]["name"],
                             "inspected": st["inspected"],
                             "defects": st["defects"],
-                            "defect_rate_percent": pct(st["defect_rate"], 2),
+                            "defect_rate_percent": rate_percent(st["defect_rate"]),
                         }
                         for st in s["inspected_by_station"][:6]
                     ],
@@ -110,7 +121,7 @@ class GetQuality(Tool):
                     "label": b["label"],
                     "defects": b["defects"],
                     "bottles": b["total_count"],
-                    "defect_rate_percent": pct(b["defect_rate"], 2),
+                    "defect_rate_percent": rate_percent(b["defect_rate"]),
                 }
                 for b in rows[-MAX_BUCKETS:]
             ]
@@ -119,7 +130,7 @@ class GetQuality(Tool):
             data["total"] = {
                 "defects": t["total"]["defects"],
                 "bottles": t["total"]["total_count"],
-                "defect_rate_percent": pct(t["total"]["defect_rate"], 2),
+                "defect_rate_percent": rate_percent(t["total"]["defect_rate"]),
             }
             key = [
                 metric("Defects", data["total"]["defects"]),

@@ -14,9 +14,11 @@ from apps.analytics.services.report import TooManyBucketsError, oee_report
 from apps.assistant.tools.core import (
     END,
     LINE,
+    RANGE_ID,
     START,
     ChoiceParam,
     DateParam,
+    RangeSlot,
     Source,
     Tool,
     ToolContext,
@@ -170,15 +172,24 @@ class GetLineStatus(Tool):
         return ToolResult(data, sources=sources, warnings=warnings)
 
 
-def compact_oee(total: dict[str, Any]) -> dict[str, Any]:
+def percent_or_reason(ratio: dict[str, Any]) -> float | str:
+    """A percentage, or "not calculable: <reason>" (never a bare null the model may print)."""
+    if ratio.get("percent") is not None:
+        return ratio["percent"]
+    return f"not calculable: {ratio.get('null_reason') or 'no data'}"
+
+
+def compact_oee(total: dict[str, Any], settings: dict[str, Any] | None = None) -> dict[str, Any]:
     inputs = total["inputs"]
-    return {
-        "oee_percent": total["oee"]["percent"],
-        "availability_percent": total["availability"]["percent"],
-        "performance_percent": total["performance"]["percent"],
-        "quality_percent": total["quality"]["percent"],
-        "data_coverage_percent": total["data_coverage"]["percent"],
-        "not_calculable_reason": total["null_reason"],
+    no_data_counted = (settings or {}).get("no_data_handling") != "excluded"
+    data = {
+        "oee_percent": percent_or_reason(total["oee"]),
+        "availability_percent": percent_or_reason(total["availability"]),
+        "performance_percent": percent_or_reason(total["performance"]),
+        "quality_percent": percent_or_reason(total["quality"]),
+        "data_coverage_percent": percent_or_reason(total["data_coverage"]),
+        "no_data_minutes": minutes(inputs["no_data_seconds"]),
+        "no_data_counted_as_downtime": no_data_counted,
         "good_bottles": inputs["good_count"],
         "total_bottles": inputs["total_count"],
         "rejected_bottles": inputs["rejected_count"],
@@ -189,6 +200,25 @@ def compact_oee(total: dict[str, Any]) -> dict[str, Any]:
             k: minutes(v) for k, v in inputs["unplanned_downtime_by_category_seconds"].items()
         },
     }
+    if total["null_reason"]:
+        data["not_calculable_reason"] = total["null_reason"]
+    return data
+
+
+def no_data_warning(data: dict[str, Any]) -> str | None:
+    """Missing machine data is easy to mistake for real stops: say how much there was."""
+    minutes_missing = data["no_data_minutes"] or 0
+    if not minutes_missing:
+        return None
+    if data["no_data_counted_as_downtime"]:
+        return (
+            f"{minutes_missing} min of this time had no data from the machines. This factory "
+            "counts it as unplanned downtime, so not all of the downtime is real stops."
+        )
+    return (
+        f"{minutes_missing} min of this time had no data from the machines "
+        "(left out of planned time)."
+    )
 
 
 class GetOee(Tool):
@@ -197,8 +227,10 @@ class GetOee(Tool):
         "OEE, availability, performance and quality (%) for a line and range, with good "
         "bottles and downtime. Optional group_by: hour, day or shift."
     )
+    ranges = (RangeSlot(),)
     params = (
         LINE,
+        RANGE_ID,
         START,
         END,
         ChoiceParam(
@@ -226,23 +258,26 @@ class GetOee(Tool):
         data: dict[str, Any] = {
             "line": line.name,
             "range": range_label(start, min(end, ctx.now), line.factory.timezone),
-            **compact_oee(total),
+            **compact_oee(total, report["settings"]),
         }
         if group_by:
             buckets = report["buckets"]
             data["by_" + group_by] = [
                 {
                     "label": b["label"],
-                    "oee_percent": b["oee"]["percent"],
-                    "availability_percent": b["availability"]["percent"],
-                    "performance_percent": b["performance"]["percent"],
-                    "quality_percent": b["quality"]["percent"],
+                    "oee_percent": percent_or_reason(b["oee"]),
+                    "availability_percent": percent_or_reason(b["availability"]),
+                    "performance_percent": percent_or_reason(b["performance"]),
+                    "quality_percent": percent_or_reason(b["quality"]),
                 }
                 for b in buckets[-MAX_BUCKETS:]
             ]
             if len(buckets) > MAX_BUCKETS:
                 data["truncated"] = f"Only the last {MAX_BUCKETS} of {len(buckets)} groups."
         warnings = [w["message"] for w in total["warnings"]]
+        missing = no_data_warning(data)
+        if missing:
+            warnings.append(missing)
         sources = [
             Source("line", line.pk, f"OEE · {line.name}", overview_link(line.pk)),
             Source(
@@ -266,9 +301,10 @@ class GetProductionOrders(Tool):
     name = "get_production_orders"
     description = (
         "Production orders (which product, when) and the changeovers between products in a "
-        "range. Each changeover gives ready-made before and after ranges for compare_periods."
+        "range. Each changeover gives before and after range ids for compare_periods."
     )
-    params = (LINE, START, END)
+    ranges = (RangeSlot(),)
+    params = (LINE, RANGE_ID, START, END)
 
     def run(self, ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         line: ProductionLine = ctx.line(args["line_id"])
@@ -304,8 +340,14 @@ class GetProductionOrders(Tool):
                     "at": local(at, zone),
                     "from_product": previous.product.sku,
                     "to_product": current.product.sku,
-                    "before_range": {"start": iso(previous.effective_from), "end": iso(at)},
-                    "after_range": {"start": iso(at), "end": iso(after_end)}
+                    "before_range_id": ctx.ranges.add(
+                        previous.effective_from,
+                        at,
+                        f"Before the changeover, {range_label(previous.effective_from, at, zone)}",
+                    ).range_id,
+                    "after_range_id": ctx.ranges.add(
+                        at, after_end, f"After the changeover, {range_label(at, after_end, zone)}"
+                    ).range_id
                     if after_end > at
                     else None,
                 }

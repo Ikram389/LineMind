@@ -74,6 +74,8 @@ export interface AssistantMessage {
   key_metrics: KeyMetric[];
   warnings: string[];
   number_check: NumberCheck | Record<string, never>;
+  /** Answered without looking at any data, even after a reminder. */
+  unchecked: boolean;
   model: string;
   duration_ms: number | null;
   created_at: string;

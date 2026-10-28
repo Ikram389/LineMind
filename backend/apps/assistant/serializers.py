@@ -33,6 +33,7 @@ class MessageSerializer(serializers.ModelSerializer):
             "key_metrics",
             "warnings",
             "number_check",
+            "unchecked",
             "model",
             "prompt_tokens",
             "completion_tokens",

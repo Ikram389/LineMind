@@ -107,7 +107,7 @@ def test_the_tool_reports_the_resolved_range(
     missing = run_tool(
         RawToolCall("t", "resolve_time_range", json.dumps({**args, "shift_name": None})), ctx
     )
-    assert not missing.valid and "shift_name is required" in missing.error
+    assert not missing.valid and "phrase=shift_on_date needs shift_name" in missing.error
 
 
 def test_difference_is_exact() -> None:
@@ -133,11 +133,13 @@ def test_compare_periods_uses_the_services(
     user = world.users["production_supervisor"]  # type: ignore[attr-defined]
     ctx = ToolContext(user, user.membership.organization, JAM_END + timedelta(hours=1))
     before = (JAM_START - timedelta(hours=1), JAM_START)
+    a = ctx.ranges.add(*before, "the hour before")  # as resolve_time_range would
+    ctx.ranges.add(JAM_START, JAM_END, "the jam")
     args = {
         "metric": "downtime_minutes",
         "line_id": bottling.line.pk,
-        "range_a": {"start": iso(before[0]), "end": iso(before[1])},
-        "range_b": {"start": iso(JAM_START), "end": iso(JAM_END)},
+        "range_a_id": a.range_id,  # by id ...
+        "range_b": {"start": iso(JAM_START), "end": iso(JAM_END)},  # ... or exactly matching
     }
     outcome = run_tool(RawToolCall("t", "compare_periods", json.dumps(args)), ctx)
     assert outcome.result is not None

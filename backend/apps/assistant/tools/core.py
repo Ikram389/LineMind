@@ -155,11 +155,61 @@ class RangeParam(Param):
 
 
 LINE = IntParam("line_id", "The line id (from list_lines).")
-START = InstantParam("start", "Range start, ISO date-time in UTC (from resolve_time_range).")
-END = InstantParam("end", "Range end, ISO date-time in UTC (from resolve_time_range).")
+RANGE_ID = TextParam(
+    "range_id",
+    "The range_id from resolve_time_range or a ready-made range (e.g. today, this_week).",
+    required=False,
+    max_length=40,
+)
+# Data tools take a range_id (preferred) or exactly the start/end LineMind returned.
+START = InstantParam("start", "Only if exactly the start returned by LineMind.", required=False)
+END = InstantParam("end", "Only if exactly the end returned by LineMind.", required=False)
 
 
 # --- Context, sources, results -------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class KnownRange:
+    range_id: str
+    start: datetime
+    end: datetime
+    label: str
+
+
+@dataclass
+class RangeBook:
+    """The ranges LineMind resolved during one question: from resolve_time_range, the
+    prompt's ready-made ranges, the screen the user asked from, or a changeover. Data tools
+    only accept these, so the model can never invent timestamps."""
+
+    entries: dict[str, KnownRange] = field(default_factory=dict)
+
+    def add(
+        self, start: datetime, end: datetime, label: str, range_id: str | None = None
+    ) -> KnownRange:
+        for known in self.entries.values():  # the same span keeps one id
+            if known.start == start and known.end == end:
+                return known
+        rid = (
+            range_id
+            or f"r{sum(1 for k in self.entries if k.startswith('r') and k[1:].isdigit()) + 1}"
+        )
+        known = KnownRange(rid, start, end, label)
+        self.entries[rid] = known
+        return known
+
+    def get(self, range_id: str) -> KnownRange | None:
+        return self.entries.get(range_id.strip())
+
+    def match(self, start: datetime, end: datetime) -> KnownRange | None:
+        return next((k for k in self.entries.values() if k.start == start and k.end == end), None)
+
+
+NOT_RESOLVED = (
+    "This time range was not resolved by LineMind. Call resolve_time_range first (or use a "
+    "ready-made range) and pass its range_id."
+)
 
 
 @dataclass
@@ -167,6 +217,7 @@ class ToolContext:
     user: User
     organization: Organization
     now: datetime
+    ranges: RangeBook = field(default_factory=RangeBook)
 
     def lines(self) -> QuerySet[ProductionLine]:
         return scope_to_user(
@@ -211,10 +262,60 @@ class ToolResult:
     error: str | None = None  # "not_found", "no_data", "invalid_range", "failed"
 
 
+@dataclass(frozen=True)
+class RangeSlot:
+    """Where a tool takes a time range: a range id, or a start/end pair that must match a
+    range LineMind resolved. The resolved range is put back as `start`/`end` (or as the
+    `pair` argument, e.g. compare_periods' range_a)."""
+
+    id_param: str = "range_id"
+    pair: str | None = None  # None: the "start" and "end" arguments
+    required: bool = True
+
+
 class Tool:
     name: ClassVar[str]
     description: ClassVar[str]
     params: ClassVar[tuple[Param, ...]] = ()
+    ranges: ClassVar[tuple[RangeSlot, ...]] = ()
+
+    def range_required(self, args: dict[str, Any], slot: RangeSlot) -> bool:
+        """Some tools need a range only in some cases (e.g. a list, not one item)."""
+        return slot.required
+
+    def resolve_ranges(self, ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+        """Replace range ids (or matching start/end) by the ranges LineMind resolved."""
+        args = dict(args)
+        for slot in self.ranges:
+            rid = args.pop(slot.id_param, None)
+            if slot.pair is None:
+                pair = (
+                    (args.get("start"), args.get("end"))
+                    if "start" in args or "end" in args
+                    else None
+                )
+            else:
+                pair = args.get(slot.pair)
+            known: KnownRange | None = None
+            if rid is not None:
+                known = ctx.ranges.get(rid)
+                if known is None:
+                    raise ArgumentError(f"Unknown {slot.id_param} {rid!r}. {NOT_RESOLVED}")
+            elif pair is not None:
+                start, end = pair
+                if start is None or end is None:
+                    raise ArgumentError(f"Give both start and end, or a range_id. {NOT_RESOLVED}")
+                known = ctx.ranges.match(start, end)
+                if known is None:
+                    raise ArgumentError(NOT_RESOLVED)
+            elif self.range_required(args, slot):
+                raise ArgumentError(f"{slot.id_param} is required. {NOT_RESOLVED}")
+            if known is not None:
+                if slot.pair is None:
+                    args["start"], args["end"] = known.start, known.end
+                else:
+                    args[slot.pair] = (known.start, known.end)
+        return args
 
     def spec(self) -> dict[str, Any]:
         return {

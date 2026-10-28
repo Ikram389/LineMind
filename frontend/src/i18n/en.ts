@@ -728,6 +728,7 @@ export const en = {
   "assistant.fromQuestionHelp": "This number only appears in your question, not in LineMind's data.",
   "assistant.checkSummary": "{count} numbers checked against LineMind's data",
   "assistant.checkUnverified": "{count} not verified",
+  "assistant.unchecked": "Not checked against LineMind data: the assistant answered without looking up any data. Do not rely on it.",
   "assistant.aiNote": "AI assessment: explanations are possibilities, not facts. Check the sources.",
   "assistant.helpfulQ": "Was this answer helpful?",
   "assistant.helpful": "Helpful",

@@ -54,6 +54,7 @@ function answer(overrides: Partial<AssistantMessage> = {}): AssistantMessage {
     created_at: "2026-10-12T11:00:00Z",
     tool_calls: [{ order: 1, name: "get_downtime", arguments: { line_id: 1, report: "summary" }, invalid: false, error: "", duration_ms: 40 }],
     feedback: null,
+    unchecked: false,
     ...overrides,
   };
 }
@@ -159,6 +160,19 @@ describe("AnswerCard", () => {
     expect(trace).toHaveTextContent("Checking the downtime…");
     expect(trace).toHaveTextContent('"report": "summary"');
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("says plainly when an answer was not checked against LineMind data", () => {
+    const { unmount } = renderWithProviders(<AnswerCard answer={answer()} conversationId={5} />);
+    expect(screen.queryByTestId("answer-unchecked")).toBeNull();
+    unmount();
+
+    renderWithProviders(
+      <AnswerCard answer={answer({ unchecked: true, content: "There is no data for that line.", tool_calls: [] })} conversationId={5} />,
+    );
+    const note = screen.getByTestId("answer-unchecked");
+    expect(note).toHaveTextContent("Not checked against LineMind data");
+    expect(note.querySelector("svg")).not.toBeNull(); // icon + words, not colour alone
   });
 
   it("sends feedback", async () => {

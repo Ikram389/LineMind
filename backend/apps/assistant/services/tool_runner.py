@@ -68,6 +68,8 @@ def run_tool(call: RawToolCall, ctx: ToolContext) -> Outcome:
         )
     try:
         args = tool.validate(arguments)
+        # Only ranges LineMind resolved are accepted (never timestamps the model made up).
+        args = tool.resolve_ranges(ctx, args)
     except ArgumentError as exc:
         return _invalid(call, arguments, str(exc), started)
 

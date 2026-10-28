@@ -120,6 +120,11 @@ export function AnswerCard({ answer, conversationId }: { answer: AssistantMessag
         </p>
       )}
 
+      {answer.unchecked && (
+        <div data-testid="answer-unchecked">
+          <InlineNotice tone="warning">{t("assistant.unchecked")}</InlineNotice>
+        </div>
+      )}
       <AnswerText content={answer.content} check={answer.number_check} />
 
       {answer.key_metrics.length > 0 && (

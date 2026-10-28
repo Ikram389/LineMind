@@ -3,6 +3,7 @@
     python manage.py assistant_eval
     python manage.py assistant_eval --models openai/gpt-oss-120b,openai/gpt-oss-20b
     python manage.py assistant_eval --only q1,fr1 --pause 6
+    python manage.py assistant_eval --resume reports/assistant_eval/<stamp>.json
 
 Writes reports/assistant_eval/<timestamp>.md (readable) and .json (all scores).
 Uses the configured provider (ASSISTANT_* settings); --models switches only the model.
@@ -36,6 +37,11 @@ class Command(BaseCommand):
         )
         parser.add_argument("--pause", type=float, default=4.0, help="Seconds between questions.")
         parser.add_argument("--temperature", type=float, default=0.0, help="0 = deterministic.")
+        parser.add_argument(
+            "--resume",
+            default="",
+            help="A previous report .json: keep its answers, run only what is missing or not run.",
+        )
         parser.add_argument("--production-model", default=PRODUCTION_MODEL)
         parser.add_argument("--development-model", default=DEVELOPMENT_MODEL)
         parser.add_argument(
@@ -53,6 +59,17 @@ class Command(BaseCommand):
             raise CommandError("No question matches --only.")
         models = [m.strip() for m in options["models"].split(",") if m.strip()]
         models = models or [settings.ASSISTANT["MODEL"] or "fake-model"]
+        previous: dict[str, dict[str, runner.Score]] = {}
+        if options["resume"]:
+            path = Path(options["resume"])
+            if not path.exists():
+                raise CommandError(f"No report at {path}.")
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            previous = {
+                m: {row["question"]: runner.from_dict(row) for row in rows}
+                for m, rows in raw.items()
+            }
+            models = list(dict.fromkeys([*previous, *models])) if not options["models"] else models
 
         self.stdout.write("Preparing the evaluation data (idempotent)…")
         world = data.build(sorted({q.line for q in questions}))
@@ -62,9 +79,13 @@ class Command(BaseCommand):
             provider = providers.current_override() or providers.build_provider(
                 model=model, temperature=options["temperature"]
             )
-            self.stdout.write(f"Model {provider.model}: {len(questions)} questions")
+            done = previous.get(provider.model, {})
+            kept = sum(1 for s in done.values() if s.status != runner.NOT_RUN)
+            self.stdout.write(
+                f"Model {provider.model}: {len(questions)} questions ({kept} kept from --resume)"
+            )
             scores[provider.model] = runner.run(
-                questions, world, provider, options["pause"], progress=self.stdout.write
+                questions, world, provider, options["pause"], progress=self.stdout.write, done=done
             )
 
         out = Path(options["output"])

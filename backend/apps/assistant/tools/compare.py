@@ -18,6 +18,7 @@ from apps.assistant.tools.core import (
     ChoiceParam,
     IntParam,
     RangeParam,
+    RangeSlot,
     Source,
     TextParam,
     Tool,
@@ -133,8 +134,20 @@ class ComparePeriods(Tool):
     params = (
         ChoiceParam("metric", "The metric.", choices=tuple(METRICS)),
         LINE,
-        RangeParam("range_a", "The first (earlier) range: start and end."),
-        RangeParam("range_b", "The second (later) range: start and end."),
+        TextParam(
+            "range_a_id",
+            "range_id of the first (earlier) range. Preferred.",
+            required=False,
+            max_length=40,
+        ),
+        TextParam(
+            "range_b_id",
+            "range_id of the second (later) range. Preferred.",
+            required=False,
+            max_length=40,
+        ),
+        RangeParam("range_a", "Only if exactly a range returned by LineMind.", required=False),
+        RangeParam("range_b", "Only if exactly a range returned by LineMind.", required=False),
         IntParam(
             "machine_id",
             "Optional, for downtime_minutes and stop_count: only this machine's breakdowns.",
@@ -148,9 +161,12 @@ class ComparePeriods(Tool):
         ),
     )
 
+    ranges = (RangeSlot("range_a_id", "range_a"), RangeSlot("range_b_id", "range_b"))
+
     def check(self, args: dict[str, Any]) -> None:
-        check_range(*args["range_a"])
-        check_range(*args["range_b"])
+        for key in ("range_a", "range_b"):
+            if key in args:
+                check_range(*args[key])
 
     def run(self, ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         line = ctx.line(args["line_id"])

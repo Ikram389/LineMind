@@ -87,6 +87,11 @@ class Message(models.Model):
     key_metrics = models.JSONField(default=list, blank=True)
     warnings = models.JSONField(default=list, blank=True)
     number_check = models.JSONField(default=dict, blank=True)
+    unchecked = models.BooleanField(
+        default=False,
+        help_text="Answered without any tool call, even after a reminder: not checked against "
+        "LineMind data (shown with a note).",
+    )
     model = models.CharField(max_length=200, blank=True)
     prompt_tokens = models.PositiveIntegerField(null=True, blank=True)
     completion_tokens = models.PositiveIntegerField(null=True, blank=True)

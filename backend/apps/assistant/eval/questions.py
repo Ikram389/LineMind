@@ -151,6 +151,33 @@ def defect_rate(world: EvalWorld, now: datetime) -> list[list[float]]:
 
 THU_1_OCT = at("2026-10-01T06:00:00")
 TUE_6_OCT = at("2026-10-06T08:00:00")
+
+
+def week_of_12_oct(world: EvalWorld, now: datetime) -> list[list[float]]:
+    """Top machine by downtime in the week containing Mon 12 Oct (Eval Line 2, the jam)."""
+    start, end = _range(world, now, "week_containing_date", day=date(2026, 10, 12))
+    f = AnalysisFilters(start=start, end=end, now=now)
+    groups = pareto(select_entries([world.lines["Eval Line 2"]], f), "machine", "line")["groups"]
+    return [[minutes(groups[0]["total_seconds"])]] if groups else [[]]
+
+
+def defects_5_to_9_oct(world: EvalWorld, now: datetime) -> list[list[float]]:
+    """Defects on Eval Line 1 from 5 to 9 October (local days, both included)."""
+    start, end = _range(
+        world, now, "date_range", start_date=date(2026, 10, 5), end_date=date(2026, 10, 9)
+    )
+    f = QualityFilters(start=start, end=end)
+    return [[float(quality_summary([world.lines["Eval Line 1"]], f)["defects"])]]
+
+
+def stops_in_september(world: EvalWorld, now: datetime) -> list[list[float]]:
+    """Line stops on Eval Line 3 in September 2026 (local month)."""
+    start, end = _range(world, now, "month_containing_date", day=date(2026, 9, 15))
+    f = AnalysisFilters(start=start, end=end, now=now)
+    return [[float(summary(select_entries([world.lines["Eval Line 3"]], f), "line")["stops"])]]
+
+
+TUE_20_OCT = at("2026-10-20T08:00:00")
 MON_12_OCT = at("2026-10-12T12:00:00")
 FRI_2_OCT = at("2026-10-02T06:00:00")
 
@@ -298,6 +325,92 @@ QUESTIONS: tuple[Question, ...] = (
         "Eval Line 3",
         labeler_fix,
         tags=("translation",),
+    ),
+    # Periods that need the new phrases (week of a date, a span of days, a month)
+    Question(
+        "w_en",
+        "en",
+        "Which machine caused the most downtime on Eval Line 2 in the week of 12 October 2026?",
+        TUE_20_OCT,
+        "Eval Line 2",
+        week_of_12_oct,
+        ("Labeler",),
+        ("ranges",),
+    ),
+    Question(
+        "w_fr",
+        "fr",
+        "Quelle machine a causé le plus de temps d'arrêt sur Eval Line 2 pendant la "
+        "semaine du 12 octobre 2026 ?",
+        TUE_20_OCT,
+        "Eval Line 2",
+        week_of_12_oct,
+        ("Labeler",),
+        ("ranges",),
+    ),
+    Question(
+        "w_ar",
+        "ar",
+        "ما الآلة التي تسببت في أكبر وقت توقف على Eval Line 2 خلال أسبوع 12 أكتوبر 2026؟",
+        TUE_20_OCT,
+        "Eval Line 2",
+        week_of_12_oct,
+        ("Labeler",),
+        ("ranges",),
+    ),
+    Question(
+        "r_en",
+        "en",
+        "How many defects were found on Eval Line 1 between 5 and 9 October 2026?",
+        TUE_20_OCT,
+        "Eval Line 1",
+        defects_5_to_9_oct,
+        tags=("ranges",),
+    ),
+    Question(
+        "r_fr",
+        "fr",
+        "Combien de défauts ont été détectés sur Eval Line 1 entre le 5 et le 9 octobre 2026 ?",
+        TUE_20_OCT,
+        "Eval Line 1",
+        defects_5_to_9_oct,
+        tags=("ranges",),
+    ),
+    Question(
+        "r_ar",
+        "ar",
+        "كم عدد العيوب التي تم اكتشافها على Eval Line 1 بين 5 و 9 أكتوبر 2026؟",
+        TUE_20_OCT,
+        "Eval Line 1",
+        defects_5_to_9_oct,
+        tags=("ranges",),
+    ),
+    Question(
+        "m_en",
+        "en",
+        "How many line stops did Eval Line 3 have in September 2026?",
+        TUE_20_OCT,
+        "Eval Line 3",
+        stops_in_september,
+        tags=("ranges",),
+    ),
+    Question(
+        "m_fr",
+        "fr",
+        "Combien d'arrêts de ligne Eval Line 3 a-t-elle eus en septembre 2026 ?",
+        TUE_20_OCT,
+        "Eval Line 3",
+        stops_in_september,
+        tags=("ranges",),
+    ),
+    Question(
+        "m_ar",
+        "ar",
+        "كم عدد توقفات الخط في Eval Line 3 خلال شهر سبتمبر 2026؟",
+        TUE_20_OCT,
+        "Eval Line 3",
+        stops_in_september,
+        tags=("ranges",),
     ),
     # Should be answered "no data available"
     Question(

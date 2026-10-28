@@ -26,6 +26,10 @@ CtxFactory = Callable[..., ToolContext]
 
 
 def call(ctx: ToolContext, name: str, **args: Any) -> Outcome:
+    """Call a tool as the model would. A start/end given here stands for a range LineMind
+    resolved earlier in the question (data tools refuse any other), so it is registered."""
+    if isinstance(args.get("start"), datetime) and isinstance(args.get("end"), datetime):
+        ctx.ranges.add(args["start"], args["end"], "test range")
     for key, value in list(args.items()):
         if isinstance(value, datetime):
             args[key] = iso(value)
@@ -373,9 +377,10 @@ def test_production_orders_give_ready_made_changeover_ranges(
         scheduled_start=t0 + timedelta(hours=2),
         scheduled_end=t0 + timedelta(hours=6),
     )
+    c = ctx()
     result = data(
         call(
-            ctx(),
+            c,
             "get_production_orders",
             line_id=bottling.line.pk,
             start=t0,
@@ -384,14 +389,23 @@ def test_production_orders_give_ready_made_changeover_ranges(
     )
     change = result["last_changeover"]
     assert (change["from_product"], change["to_product"]) == ("W50", "J33")
-    assert change["before_range"] == {
-        "start": "2026-10-12T06:00:00Z",
-        "end": "2026-10-12T08:00:00Z",
-    }
-    assert change["after_range"] == {
-        "start": "2026-10-12T08:00:00Z",
-        "end": "2026-10-12T11:00:00Z",
-    }  # until now
+    # The before/after ranges are LineMind's, registered for compare_periods.
+    before, after = c.ranges.get(change["before_range_id"]), c.ranges.get(change["after_range_id"])
+    assert before is not None and after is not None
+    assert (iso(before.start), iso(before.end)) == ("2026-10-12T06:00:00Z", "2026-10-12T08:00:00Z")
+    assert (iso(after.start), iso(after.end)) == (
+        "2026-10-12T08:00:00Z",
+        "2026-10-12T11:00:00Z",
+    )  # until now
+    compared = call(
+        c,
+        "compare_periods",
+        metric="stop_count",
+        line_id=bottling.line.pk,
+        range_a_id=change["before_range_id"],
+        range_b_id=change["after_range_id"],
+    )
+    assert compared.valid, compared.error
 
 
 # --- Validation ----------------------------------------------------------------------
@@ -402,7 +416,7 @@ def test_production_orders_give_ready_made_changeover_ranges(
     [
         ("get_oee", "{not json", "not valid JSON"),
         ("get_teleport", "{}", "no tool named"),
-        ("get_oee", json.dumps({"line_id": 1}), "start is required"),
+        ("get_oee", json.dumps({"line_id": 1}), "range_id is required"),
         (
             "get_oee",
             json.dumps({"line_id": 1, "start": "yesterday", "end": "today"}),

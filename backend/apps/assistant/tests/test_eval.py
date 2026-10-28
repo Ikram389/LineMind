@@ -11,7 +11,6 @@ from apps.assistant.eval.questions import BY_ID, longest_jam
 from apps.assistant.eval.report import render
 from apps.assistant.eval.runner import Score
 from apps.assistant.providers.fake import FakeProvider, FakeTurn
-from apps.assistant.tools.core import iso
 
 
 def test_the_evaluation_writes_a_report(
@@ -26,7 +25,7 @@ def test_the_evaluation_writes_a_report(
             tool_calls=[
                 (
                     "get_incidents",
-                    {"line_id": line.pk, "start": "2026-10-11T23:00:00Z", "end": iso(question.now)},
+                    {"line_id": line.pk, "range_id": "today"},  # a ready-made range
                 )
             ]
         ),
@@ -35,12 +34,14 @@ def test_the_evaluation_writes_a_report(
             "its first observed stop was the Labeler [1]."
         ),
         FakeTurn(text="There is no data for another company's line."),
+        FakeTurn(text="There is no data for another company's line."),  # after the reminder
         model="openai/gpt-oss-120b",
     )
     call_command("assistant_eval", "--only", "q4,n1", "--pause", "0", "--output", str(tmp_path))
 
     report = next(tmp_path.glob("*.md")).read_text(encoding="utf-8")
-    assert "| openai/gpt-oss-120b (development) | 2 | 1/1 (100%)" in report
+    # Answered 2, not run 0, correct 1/1.
+    assert "| openai/gpt-oss-120b (development) | 2 | 0 | 1/1 (100%)" in report
     assert "## Production candidate: openai/gpt-oss-20b" in report
     assert "Not run. Add it with `--models openai/gpt-oss-120b,openai/gpt-oss-20b`" in report
     scores = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))[

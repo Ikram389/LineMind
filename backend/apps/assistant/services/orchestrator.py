@@ -21,7 +21,7 @@ import json
 import logging
 import re
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -41,10 +41,11 @@ from apps.assistant.providers.base import (
 )
 from apps.assistant.providers.errors import ModelOutputError, ProviderError, ProviderUnreachable
 from apps.assistant.serializers import MessageSerializer
+from apps.assistant.services.answer_text import clean_answer
 from apps.assistant.services.language import detect, message
 from apps.assistant.services.limits import AllSlotsBusy, Slot
 from apps.assistant.services.numbers import check_numbers
-from apps.assistant.services.prompt import build_system_prompt
+from apps.assistant.services.prompt import LANGUAGE_NAMES, build_system_prompt
 from apps.assistant.services.status import model_status
 from apps.assistant.services.tool_runner import (
     CHARS_PER_TOKEN,
@@ -56,7 +57,7 @@ from apps.assistant.services.tool_runner import (
     run_tool,
 )
 from apps.assistant.tools import BY_NAME, tool_specs
-from apps.assistant.tools.core import ToolContext, iso, range_label
+from apps.assistant.tools.core import RangeBook, ToolContext, iso, range_label
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,11 @@ MAX_KEY_METRICS = 8
 MAX_WARNINGS = 8
 
 Event = tuple[str, dict[str, Any]]
+
+REMINDER = (
+    "[LineMind] You have not checked any data. Use the tools to check LineMind's data before "
+    "answering. If no tool can help, answer again briefly."
+)
 
 PROGRESS = {
     "list_lines": "Listing your lines…",
@@ -130,10 +136,12 @@ class Run:
     started: float = field(default_factory=time.monotonic)
     outcomes: list[Outcome] = field(default_factory=list)
     context: dict[str, Any] = field(default_factory=dict)
+    ranges: RangeBook = field(default_factory=RangeBook)
     zone: str = "UTC"
     known_sources: dict[str, int] = field(default_factory=dict)
     next_number: int = 1
     calls_made: int = 0
+    rewritten: bool = False  # the answer was rewritten in the question's language
     prompt_tokens: int = 0
     completion_tokens: int = 0
 
@@ -293,14 +301,14 @@ def _history(run: Run) -> list[ChatMessage]:
 
 
 def _loop(run: Run, question_timeout: float) -> Iterator[Event]:
-    ctx = ToolContext(run.user, run.conversation.organization, run.now)
+    ctx = ToolContext(run.user, run.conversation.organization, run.now, run.ranges)
     lines = list(ctx.lines().order_by("factory__name", "name")[:50])
     focus_line = next((line for line in lines if line.pk == run.conversation.line_id), None)
     conv = run.conversation
     focus_range = (
         (conv.context_start, conv.context_end) if conv.context_start and conv.context_end else None
     )
-    system, run.context = build_system_prompt(ctx, lines, focus_line, focus_range)
+    system, run.context = build_system_prompt(ctx, lines, focus_line, focus_range, run.language)
     home = focus_line or (lines[0] if lines else None)
     run.zone = home.factory.timezone if home else "UTC"
     messages: list[ChatMessage] = [
@@ -311,6 +319,7 @@ def _loop(run: Run, question_timeout: float) -> Iterator[Event]:
     specs = tool_specs()
     max_calls = int(settings.ASSISTANT["MAX_TOOL_CALLS"])
     invalid = 0
+    reminded = False
 
     while True:
         if time.monotonic() - run.started > question_timeout:
@@ -356,7 +365,21 @@ def _loop(run: Run, question_timeout: float) -> Iterator[Event]:
             text = result.text.strip()
             if not text:
                 raise EmptyAnswer("The model returned an empty answer.")
-            yield _finish(run, text)
+            if run.calls_made == 0 and not reminded:
+                # Answered without looking at any data: one reminder to check first.
+                reminded = True
+                if gate.emitted:
+                    yield ("text_reset", {})
+                messages += [
+                    {"role": "assistant", "content": text},
+                    {"role": "user", "content": REMINDER},
+                ]
+                continue
+            text = clean_answer(text)
+            if detect(text) != run.language and run.language in LANGUAGE_NAMES:
+                text = clean_answer((yield from _rewrite(run, messages, text)))
+            # The number check runs on the final text (after any rewrite), in _finish.
+            yield _finish(run, text, unchecked=run.calls_made == 0)
             return
 
         if gate.emitted:
@@ -400,7 +423,6 @@ def _loop(run: Run, question_timeout: float) -> Iterator[Event]:
 
 def _ranges_used(run: Run) -> list[dict[str, Any]]:
     """The ranges the tools actually used: what the answer is about."""
-    ready = {(r["start"], r["end"]): r for r in run.context.get("ranges", {}).values()}
     found: dict[tuple[str, str], dict[str, Any]] = {}
     for outcome in run.outcomes:
         if not outcome.valid or outcome.result is None or outcome.result.error:
@@ -418,9 +440,8 @@ def _ranges_used(run: Run) -> list[dict[str, Any]]:
                 pairs.append(args[key])
         for start, end in pairs:
             key = (iso(start), iso(min(end, run.now)))
-            label = ready.get(key, {}).get("label") or range_label(
-                start, min(end, run.now), run.zone
-            )
+            known = run.ranges.match(start, end)
+            label = known.label if known else range_label(start, min(end, run.now), run.zone)
             found.setdefault(key, {"start": key[0], "end": key[1], "label": label})
     return list(found.values())
 
@@ -473,7 +494,31 @@ def _store(run: Run, **fields: Any) -> Message:
     return msg
 
 
-def _finish(run: Run, text: str) -> Event:
+def _rewrite(run: Run, messages: list[ChatMessage], text: str) -> Generator[Event, None, str]:
+    """One request to rewrite an answer in the question's language (no tools)."""
+    name = LANGUAGE_NAMES[run.language]
+    request = [
+        *messages,
+        {"role": "assistant", "content": text},
+        {
+            "role": "user",
+            "content": f"[LineMind] Rewrite your whole answer in {name}. Keep exactly the same "
+            "facts, numbers, time range and source numbers [n]. Do not add anything.",
+        },
+    ]
+    yield ("text_reset", {})
+    rewritten = ""
+    for item in run.provider.stream(request, []):
+        if isinstance(item, TextDelta):
+            yield ("delta", {"text": item.text})
+        else:
+            run.add_tokens(item.result)
+            rewritten = item.result.text.strip()
+    run.rewritten = True
+    return rewritten or text
+
+
+def _finish(run: Run, text: str, unchecked: bool = False) -> Event:
     valid = [o for o in run.outcomes if o.valid and o.result is not None]
     evidence = [
         {
@@ -503,7 +548,10 @@ def _finish(run: Run, text: str) -> Event:
         key_metrics=_json_safe(list(metrics.values())[-MAX_KEY_METRICS:]),
         warnings=warnings[:MAX_WARNINGS],
         number_check=number_check,
+        unchecked=unchecked,
     )
+    if unchecked:
+        logger.warning("Assistant answer %s was given without checking any data", msg.pk)
     if number_check["unverified"]:
         logger.warning(
             "Assistant answer %s has unverified numbers: %s",

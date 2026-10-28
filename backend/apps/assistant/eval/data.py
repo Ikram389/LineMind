@@ -184,7 +184,7 @@ def build(lines: list[str] | None = None) -> EvalWorld:
     ensure_demo_stations(built["Eval Line 1"], types)
     _orders(built["Eval Line 1"], organization)
     action = _action(built["Eval Line 3"], user)
-    for name in lines or list(LINE_FIXTURES):
+    for name in list(LINE_FIXTURES) if lines is None else lines:
         for fixture in LINE_FIXTURES[name]:
             _load(built[name], fixture)
     return EvalWorld(organization, factory, user, built, action)

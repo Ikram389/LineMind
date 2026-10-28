@@ -14,11 +14,12 @@ from django.db.models import Prefetch, Q
 from apps.assistant.tools.core import (
     END,
     LINE,
+    RANGE_ID,
     START,
     ArgumentError,
     ChoiceParam,
-    InstantParam,
     IntParam,
+    RangeSlot,
     Source,
     Tool,
     ToolContext,
@@ -82,8 +83,10 @@ class GetDowntime(Tool):
         "Downtime of a line in a range: summary (total minutes, stops, longest stop, "
         "unclassified stops) or a Pareto by machine, reason, category or alarm."
     )
+    ranges = (RangeSlot(),)
     params = (
         LINE,
+        RANGE_ID,
         START,
         END,
         ChoiceParam(
@@ -193,7 +196,8 @@ class GetRecurringStops(Tool):
         "Breakdowns that repeat on the same machine for the same reason or alarm, in a range "
         "(at least the factory's threshold, usually 3)."
     )
-    params = (LINE, START, END)
+    ranges = (RangeSlot(),)
+    params = (LINE, RANGE_ID, START, END)
 
     def run(self, ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
         line = ctx.line(args["line_id"])
@@ -214,8 +218,8 @@ class GetRecurringStops(Tool):
                     "alarm_code": item["alarm_code"],
                     "stops": item["count"],
                     "downtime_minutes": minutes(item["total_seconds"]),
-                    "first": local(item["first_occurrence"], zone),
-                    "last": local(item["last_occurrence"], zone),
+                    "first_occurrence": local(item["first_occurrence"], zone),
+                    "last_occurrence": local(item["last_occurrence"], zone),
                 }
             )
             filters = {"reason": reason["code"]} if reason else {"alarm": item["alarm_code"]}
@@ -253,17 +257,23 @@ class GetIncidents(Tool):
     )
     params = (
         IntParam("line_id", "The line id (needed for a list).", required=False),
-        InstantParam("start", "Range start (needed for a list).", required=False),
-        InstantParam("end", "Range end (needed for a list).", required=False),
+        RANGE_ID,
+        START,
+        END,
         IntParam("incident_id", "Optional: one incident in detail.", required=False),
         ChoiceParam(
             "sort", "For a list.", required=False, choices=("longest", "latest"), default="longest"
         ),
     )
 
+    ranges = (RangeSlot(),)
+
+    def range_required(self, args: dict[str, Any], slot: RangeSlot) -> bool:
+        return "incident_id" not in args  # a list needs a range, one incident does not
+
     def check(self, args: dict[str, Any]) -> None:
-        if "incident_id" not in args and not {"line_id", "start", "end"} <= set(args):
-            raise ArgumentError("Give incident_id, or line_id with start and end.")
+        if "incident_id" not in args and "line_id" not in args:
+            raise ArgumentError("Give incident_id, or line_id with a range_id.")
         super().check(args)
 
     def _queryset(self, ctx: ToolContext) -> Any:

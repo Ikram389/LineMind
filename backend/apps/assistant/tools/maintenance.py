@@ -43,12 +43,13 @@ def _window(window: dict[str, Any] | None, zone: str) -> dict[str, Any] | None:
 class GetMaintenance(Tool):
     name = "get_maintenance"
     description = (
-        "Maintenance actions (open, done, verified, cancelled or all), optionally for one "
-        "line; or one action with action_id, including its before/after effectiveness."
+        "Maintenance actions (all statuses by default, newest first), optionally for one line. "
+        "With action_id: one action and its measured before/after effectiveness; use this "
+        "to know whether a fix worked."
     )
     params = (
         IntParam("line_id", "Optional line id.", required=False),
-        ChoiceParam("status", "Which actions.", required=False, choices=STATUSES, default="open"),
+        ChoiceParam("status", "Which actions.", required=False, choices=STATUSES, default="all"),
         IntParam("action_id", "Optional: one action in detail.", required=False),
     )
 

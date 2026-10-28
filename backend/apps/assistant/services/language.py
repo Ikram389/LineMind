@@ -14,8 +14,8 @@ FRENCH_ACCENTS = re.compile(r"[àâçéèêëîïôûùüÿœæ]", re.IGNORECASE
 FRENCH_WORDS = frozenset(
     """le la les des du une un est sont quel quelle quels quelles combien pourquoi quand
     où comment cette ce ces sur dans avec pour par pendant depuis hier aujourd semaine
-    mois arrêt arrêts machine ligne équipe défauts taux qui que a-t-il y-a-t-il après avant
-    plus moins""".split()
+    mois arrêt arrêts ligne équipe défauts taux qui que a-t-il y-a-t-il après avant
+    moins""".split()
 )
 
 LANGUAGES = ("en", "fr", "ar")
