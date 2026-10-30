@@ -13,6 +13,12 @@ On a bottling line, one jammed machine quickly blocks or starves its neighbours.
 
 Each organization sees only its own data. Raw machine events are never edited. Every metric is computed in one place on the server. A built-in **factory simulator** plays realistic scenarios, so you can try everything without a real line.
 
+## Team: who did what
+
+**Ikram ZIANE**: product owner and lead. Co-developed the idea from first-hand experience integrating a factory monitoring system and talking with production workers. Wrote the product specification and engineering rules, planned the step-by-step build, directed the AI coding assistant, and reviewed every technical plan, catching design flaws before implementation. Tested each feature live, ran the AI model evaluations, and produced the demo.
+
+**Fouad BOUNAB**: my husband and former colleague, network and security manager. We brainstormed the idea together from our shared experience at work. He reviewed multi-tenant data isolation and authentication, security-tested the application by attempting to access other companies' data, advised on factory network architecture and how industrial devices connect to LineMind, and gave feedback on features, screens and the demo video.
+
 ## What runs where
 
 | Service    | What it is                          | URL on your machine                        |
@@ -67,7 +73,7 @@ docker compose exec backend python manage.py create_line_api_key 1 "Simulator"
 #    Paste it into .env as SIMULATOR_API_KEY=lm_..., save .env.
 ```
 
-5. Open http://localhost:5173 and log in as `production_supervisor@demo-beverages.test`, with the password from `DEMO_USER_PASSWORD` in `.env`.
+5. Open http://localhost:5173 and log in as `production_supervisor@demo-beverages.test`. The password is `DEMO_USER_PASSWORD` from `.env`: with the template unchanged it is **`change-me-demo-password`**. The same password works for every demo user. Swap the role at the start of the email to see another role's view: `machine_operator`, `maintenance_technician`, `quality_inspector`, `factory_manager`, `analyst` or `platform_admin` (all `@demo-beverages.test`).
 6. Watch a labeler jam live (15 minutes; the jam starts at minute 5):
    ```powershell
    docker compose run --rm simulator python main.py --scenario scenarios/labeler_jam.yaml --mode realtime
