@@ -11,6 +11,8 @@ const LABEL = process.env.SHOT_LABEL ?? "before";
 const PASSWORD = process.env.DEMO_USER_PASSWORD ?? "";
 const LINE = process.env.SHOT_LINE ?? "1";
 /** A range with data for the analysis pages (the demo data is not always recent). */
+/** The maintenance action on page 12 (demo_video_prep prints the demo one). */
+const ACTION = process.env.SHOT_ACTION ?? "1";
 const RANGE = process.env.SHOT_RANGE ?? "start=2026-10-17T05:00:00Z&end=2026-10-17T21:00:00Z";
 /** SHOT_THEME=dark takes every shot in the dark theme. */
 const THEME = process.env.SHOT_THEME === "dark" ? "Dark" : null;
@@ -56,7 +58,7 @@ const PAGES: Target[] = [
   { name: "09-alerts", path: "/alerts", role: "production_supervisor" },
   { name: "10-alert-rules", path: "/alert-rules", role: "factory_manager" },
   { name: "11-maintenance", path: "/maintenance", role: "maintenance_technician" },
-  { name: "12-maintenance-action", path: "/maintenance/1", role: "maintenance_technician" },
+  { name: "12-maintenance-action", path: `/maintenance/${ACTION}`, role: "maintenance_technician" },
   { name: "13-settings", path: "/settings", role: "production_supervisor" },
   { name: "14-lines", path: "/", role: "analyst" },
   { name: "15-line-overview-tv", path: `/lines/${LINE}?tv=1`, role: "production_supervisor" },

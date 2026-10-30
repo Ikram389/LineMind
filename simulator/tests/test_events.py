@@ -310,3 +310,31 @@ def test_event_json_matches_event_api() -> None:
     assert count["count"] == 5500 and count["rejected"] == 165
     assert defect["payload"]["defect_code"] in {"Q02", "Q04"}
     assert Event.from_json(count) == last_count(events, "M06")
+
+
+def test_demo_jam_has_one_labeler_jam_and_a_few_label_defects() -> None:
+    sim, events = run("demo_jam")
+    start = sim.start
+
+    labeler = [
+        e
+        for e in state_events(events, "M05")
+        if e.event_type != "machine_started" or e.timestamp > start
+    ]
+    # Whole seconds after the start (events of one machine get a 1 ms tie-break).
+    assert [
+        (e.event_type, int((e.timestamp - start).total_seconds()), e.alarm_code)
+        for e in labeler[:2]
+    ] == [
+        ("machine_stopped", 30, "E-204"),
+        ("machine_started", 120, None),
+    ]
+    # No other faults: the labeler is the only machine that ever reports "stopped".
+    stopped = {e.machine_external_id for e in events if e.event_type == "machine_stopped"}
+    assert stopped == {"M05"}
+    assert sum(1 for e in events if e.event_type == "machine_stopped") == 1
+    # At least 10 minutes of normal running after the jam is cleared.
+    assert sim.scenario.duration - 120 >= 600
+    defects = [e for e in events if e.event_type == "quality_defect_detected"]
+    assert 2 <= len(defects) <= 6
+    assert {(e.machine_external_id, e.payload["defect_code"]) for e in defects} == {("M05", "Q03")}

@@ -1,0 +1,24 @@
+name: demo_jam
+description: >
+  For recording a demo video (run with --mode realtime: it starts "now").
+  Normal running; the labeler (M05) jams with alarm E-204 exactly 30 s after the start and
+  stays stopped for 90 s, which blocks and starves its neighbours (the same buffers as
+  labeler_jam, so the cascade shows within seconds). Then normal running for 11 more
+  minutes. No other faults. A few label defects (Q03) at the labeler, so the quality card
+  and the Quality page have unreviewed defects to show.
+line: ../config/bottling_line_1.yaml
+start: "2026-10-12T10:00:00Z"  # ignored in realtime mode (the run starts now)
+duration: 13m
+seed: 7
+tick_seconds: 1
+count_interval_seconds: 10
+defect_mode: exact
+buffers:
+  M03-M04: {capacity: 80, initial_level: 19}
+  M04-M05: {initial_level: 45}
+  M05-M06: {initial_level: 13}
+faults:
+  - {machine: M05, at: 30s, duration: 90s, alarm_code: E-204}
+# About 4 label defects over the run (0.3 % of ~1,200 labelled bottles).
+defects:
+  - {machine: M05, rates: {Q03: 0.003}}
