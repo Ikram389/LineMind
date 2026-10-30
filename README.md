@@ -2,6 +2,17 @@
 
 Manufacturing intelligence platform for bottling lines: production monitoring, downtime analysis, quality, maintenance and AI insights. The full specification is in [docs/PRODUCT.md](docs/PRODUCT.md).
 
+On a bottling line, one jammed machine quickly blocks or starves its neighbours. The cause gets lost in the noise, and the lost time is only noticed at the end of the shift. LineMind collects machine events and turns them into answers people can act on:
+
+- **Live line overview:** every machine's state, the line stop in progress and its **first observed stop**, and the shift's OEE.
+- **Downtime analysis:** stop Pareto, recurring stops, and the reasons operators give for each stop.
+- **Quality:** defects by type, station and time, with reviews by quality inspectors.
+- **Alerts:** in-app and email, sent to the right roles, with escalation.
+- **Maintenance actions:** linked to the stops they fix, with a before/after check of whether the fix helped.
+- **AI production assistant:** read-only, in English, French or Arabic, built only on LineMind's own numbers.
+
+Each organization sees only its own data. Raw machine events are never edited. Every metric is computed in one place on the server. A built-in **factory simulator** plays realistic scenarios, so you can try everything without a real line.
+
 ## What runs where
 
 | Service    | What it is                          | URL on your machine                        |
@@ -9,7 +20,10 @@ Manufacturing intelligence platform for bottling lines: production monitoring, d
 | `frontend` | React + TypeScript dashboard (Vite dev server) | http://localhost:5173           |
 | `backend`  | Django + DRF, served through ASGI (Daphne): REST API and WebSockets | http://localhost:8000/api/v1/health/ |
 | `db`       | PostgreSQL 16                       | internal only (not exposed to Windows)     |
-| `redis`    | Redis 7: live-update channel layer and cache | internal only                     |
+| `redis`    | Redis 7: live-update channel layer, cache and job queue | internal only          |
+| `worker`   | Celery worker: checks alert rules and sends alert emails | no URL                |
+| `beat`     | Celery beat: starts the alert check every 30 seconds | no URL                    |
+| `mailpit`  | Catches alert emails in development (no real mail is sent) | http://localhost:8025 |
 | `simulator`| Python factory simulator (run on demand, see below) | sends events to the backend |
 
 ## Prerequisites (Windows)
@@ -29,10 +43,38 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-Then open http://localhost:5173. You should see **LineMind** with `backend: ok` and `database: ok`.
+Then open http://localhost:5173. You should see the LineMind login page with **Backend: ok · Database: ok** under the form.
 
 Stop everything with `Ctrl+C`, or from another terminal with `docker compose down`.
 Your database data is kept in a Docker volume. `docker compose down -v` deletes it.
+
+## Quick start: from zero to a live dashboard
+
+About 5 minutes. Run these in PowerShell, in the project folder, with Docker Desktop running.
+
+```powershell
+# 1. Settings file (only once). DEMO_USER_PASSWORD in .env is the demo users' password.
+Copy-Item .env.example .env
+
+# 2. Start everything in the background
+docker compose up --build -d
+
+# 3. Demo organizations, factory, line, machines and one user per role
+docker compose exec backend python manage.py seed_demo
+
+# 4. An API key so the simulator may send events for Bottling Line 1 (shown once)
+docker compose exec backend python manage.py create_line_api_key 1 "Simulator"
+#    Paste it into .env as SIMULATOR_API_KEY=lm_..., save .env.
+```
+
+5. Open http://localhost:5173 and log in as `production_supervisor@demo-beverages.test`, with the password from `DEMO_USER_PASSWORD` in `.env`.
+6. Watch a labeler jam live (15 minutes; the jam starts at minute 5):
+   ```powershell
+   docker compose run --rm simulator python main.py --scenario scenarios/labeler_jam.yaml --mode realtime
+   ```
+   The labeler turns red with alarm E-204. Its neighbours become blocked or starved, and the banner names the labeler as the first observed stop. After 90 s the line runs again. Then open **Downtime** to classify the stop.
+
+The AI assistant needs a model provider: see [AI production assistant](#ai-production-assistant). It is optional; everything else works without it.
 
 ## Everyday commands
 
@@ -385,7 +427,7 @@ Events are saved to a queue file (`simulator/data/queue.sqlite`) **before** they
 
 - **"port is already allocated" for 8000.** Another program is using port 8000. Set `BACKEND_PORT=8001` in `.env` and restart. The frontend still works at http://localhost:5173.
 - **"port is already allocated" for 5173.** Stop the other program using that port.
-- **The page shows `backend: unreachable`.** Check `docker compose logs backend`.
-- **The page shows `database: error`.** Check `docker compose logs db`. Make sure `.env` exists and its `POSTGRES_*` values haven't changed since the database volume was first created. If they have, run `docker compose down -v` to start with a fresh database.
+- **The login page shows `Backend: unreachable`.** Check `docker compose logs backend`.
+- **The login page shows `Database: error`.** Check `docker compose logs db`. Make sure `.env` exists and its `POSTGRES_*` values haven't changed since the database volume was first created. If they have, run `docker compose down -v` to start with a fresh database.
 - **Migration errors after pulling new code** (e.g. `InconsistentMigrationHistory`). The development database was created by older code. Reset it with `docker compose down -v` and start again. This deletes all local data; re-run `seed_demo` afterwards.
 - **`failed to connect to the docker API`.** Docker Desktop isn't running. Start it and wait for "Engine running".
